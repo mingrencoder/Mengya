@@ -1,0 +1,6 @@
+{
+  "name": "Personal Life Log",
+  "description": "A minimalist, dark-mode personal life logging platform with AES-encrypted local storage and glassmorphism UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
