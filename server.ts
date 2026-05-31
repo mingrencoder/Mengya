@@ -144,6 +144,21 @@ app.delete('/api/data/travels/:id', authenticateToken, (req, res) => {
   }
 });
 
+app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
+  try {
+    const data = storageService.read();
+    const index = data.travels.findIndex(t => t.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    data.travels[index] = { ...data.travels[index], ...req.body };
+    storageService.write(data);
+    res.json(data.travels[index]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 // Bookmarks
 app.post('/api/data/bookmarks', authenticateToken, (req, res) => {
   try {
@@ -155,6 +170,17 @@ app.post('/api/data/bookmarks', authenticateToken, (req, res) => {
     data.bookmarks.push(newBookmark);
     storageService.write(data);
     res.json(newBookmark);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
+  try {
+    const data = storageService.read();
+    data.bookmarks = data.bookmarks.filter(b => b.id !== req.params.id);
+    storageService.write(data);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
   }

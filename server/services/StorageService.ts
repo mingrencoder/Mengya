@@ -19,8 +19,11 @@ export interface PlatformData {
   travels: Array<{
     id: string;
     location: string;
+    title: string;
     date: string;
-    imageUrl: string;
+    imageUrl?: string;
+    imageUrls?: string[];
+    coverImageIndex?: number;
     description?: string;
   }>;
   bookmarks: Array<{
