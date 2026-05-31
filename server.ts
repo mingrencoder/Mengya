@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import cors from 'cors';
 import multer from 'multer';
-import * as jsonwebtoken from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { StorageService, hashPassword } from './server/services/StorageService';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
@@ -56,7 +56,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
   if (!token) return res.sendStatus(401);
 
-  jsonwebtoken.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
     (req as any).user = user;
     next();
@@ -83,7 +83,7 @@ app.post('/api/auth/login', (req, res) => {
   const match = storedHash === hashPassword(password);
 
   if (match) {
-    const token = jsonwebtoken.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
     res.json({ token });
   } else {
     res.status(401).json({ error: 'Invalid password' });
