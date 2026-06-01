@@ -14,14 +14,16 @@ export function Layout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div className="relative h-screen w-full flex overflow-hidden flex-col lg:flex-row">
+    <div className="relative h-screen w-full flex overflow-hidden flex-col md:flex-row">
       <div className="fixed -top-40 -right-40 w-96 h-96 glow-purple z-0 pointer-events-none" />
       <div className="fixed -bottom-40 -left-40 w-[500px] h-[500px] glow-indigo z-0 pointer-events-none" />
 
-      {/* PC Sidebar Navigation */}
-      <motion.aside 
-        animate={{ width: isCollapsed ? 80 : 256 }}
-        className="hidden lg:flex flex-col h-full fixed left-0 top-0 border-r border-white/10 glass z-50 py-6 px-4 transition-all duration-300"
+      {/* PC/Tablet Sidebar Navigation */}
+      <aside 
+        className={cn(
+          "hidden md:flex flex-col h-full fixed left-0 top-0 border-r border-white/10 glass z-50 py-6 transition-all duration-300",
+          isCollapsed ? "w-20 px-0" : "w-64 px-4"
+        )}
       >
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -30,7 +32,7 @@ export function Layout() {
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
 
-        <div className={cn("flex items-center mb-10 transition-all", isCollapsed ? "justify-center px-0" : "gap-3 px-4")}>
+        <div className={cn("flex items-center mb-10 transition-all", isCollapsed ? "justify-center" : "gap-3")}>
           <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
             <span className="font-bold text-white text-xs">萌</span>
           </div>
@@ -43,7 +45,7 @@ export function Layout() {
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) => cn(isActive ? "sidebar-item-active" : "sidebar-item", isCollapsed ? "justify-center px-0" : "")}
+              className={({ isActive }) => cn(isActive ? "sidebar-item-active" : "sidebar-item", isCollapsed ? "justify-center px-0 mx-4" : "")}
               title={isCollapsed ? item.label : undefined}
             >
               <item.icon className="w-4 h-4 shrink-0" />
@@ -56,29 +58,31 @@ export function Layout() {
           {!isCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-4 mb-2">账户</div>}
           <NavLink
             to="/admin"
-            className={({ isActive }) => cn(isActive ? "sidebar-item-active" : "sidebar-item", isCollapsed ? "justify-center px-0" : "")}
+            className={({ isActive }) => cn(isActive ? "sidebar-item-active" : "sidebar-item", isCollapsed ? "justify-center px-0 mx-4" : "")}
             title={isCollapsed ? "后台管理" : undefined}
           >
             <Settings className="w-4 h-4 shrink-0" />
             {!isCollapsed && <span className="break-keep">后台管理</span>}
           </NavLink>
         </div>
-      </motion.aside>
+      </aside>
 
       {/* Main Content Area */}
-      <motion.main 
-        animate={{ marginLeft: isCollapsed ? 80 : 256 }}
-        className="flex-1 lg:ml-64 relative z-10 w-full mb-20 lg:mb-0 h-full flex flex-col pt-[max(env(safe-area-inset-top),_0px)] transition-all duration-300"
+      <main 
+        className={cn(
+          "flex-1 relative z-10 w-full mb-20 md:mb-0 h-full flex flex-col pt-[max(env(safe-area-inset-top),_0px)] transition-all duration-300",
+          isCollapsed ? "md:ml-20" : "md:ml-64"
+        )}
       >
         <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-12 pt-8">
           <div className="max-w-5xl mx-auto w-full">
             <OutAnimatedWrapper />
           </div>
         </div>
-      </motion.main>
+      </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-6 left-6 right-6 z-50 glass-panel rounded-2xl flex justify-around items-center p-2 border">
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 glass-panel rounded-2xl flex justify-around items-center p-2 border">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}

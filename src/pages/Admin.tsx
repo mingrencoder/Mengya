@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
 
 export function Admin() {
@@ -328,6 +328,87 @@ function TravelAdder({ token }: { token: string }) {
   const [files, setFiles] = useState<File[]>([]);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
 
+  // Filters state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Extract filter options
+  const filterOptions = React.useMemo(() => {
+    if (!data?.travels) return { years: [], months: [], locations: [] };
+    
+    const years = new Set<string>();
+    const months = new Set<string>();
+    const locations = new Set<string>();
+
+    data.travels.forEach(t => {
+      if (t.location) locations.add(t.location);
+      
+      const d = new Date(t.date);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear().toString();
+        years.add(y);
+        if (!selectedYear || selectedYear === y) {
+          months.add((d.getMonth() + 1).toString().padStart(2, '0'));
+        }
+      }
+    });
+
+    return {
+      years: Array.from(years).sort().reverse(),
+      months: Array.from(months).sort(),
+      locations: Array.from(locations).sort()
+    };
+  }, [data?.travels, selectedYear]);
+
+  const handleYearChange = (year: string) => {
+    if (selectedYear === year) {
+      setSelectedYear(null);
+      setSelectedMonth(null);
+    } else {
+      setSelectedYear(year);
+      setSelectedMonth(null);
+    }
+  };
+
+  const toggleLocation = (loc: string) => {
+    setSelectedLocations(prev => 
+      prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]
+    );
+  };
+
+  const filteredTravels = React.useMemo(() => {
+    if (!data?.travels) return [];
+    
+    return data.travels.filter(t => {
+      const matchesSearch = searchQuery 
+        ? t.title?.toLowerCase().includes(searchQuery.toLowerCase()) || t.location?.toLowerCase().includes(searchQuery.toLowerCase())
+        : true;
+
+      let matchesYear = true;
+      let matchesMonth = true;
+      if (selectedYear || selectedMonth) {
+        const d = new Date(t.date);
+        const isValidDate = !isNaN(d.getTime());
+        if (isValidDate) {
+          if (selectedYear) matchesYear = d.getFullYear().toString() === selectedYear;
+          if (selectedMonth) matchesMonth = (d.getMonth() + 1).toString().padStart(2, '0') === selectedMonth;
+        } else {
+          matchesYear = false; 
+          matchesMonth = false;
+        }
+      }
+
+      const matchesLocation = selectedLocations.length > 0 
+        ? selectedLocations.includes(t.location)
+        : true;
+
+      return matchesSearch && matchesYear && matchesMonth && matchesLocation;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [data?.travels, searchQuery, selectedYear, selectedMonth, selectedLocations]);
+
   const startEdit = (travel: any) => {
     setEditingId(travel.id);
     setForm({
@@ -511,19 +592,180 @@ function TravelAdder({ token }: { token: string }) {
       </form>
       
       {data?.travels && data.travels.length > 0 && (
-        <div className="space-y-3 pt-6 border-t border-white/10">
-          <h3 className="text-sm font-medium text-white/70">已有记录</h3>
-          {data.travels.map(travel => (
-            <div key={travel.id} className="flex items-center justify-between bg-black/20 border border-white/5 p-3 rounded-xl cursor-pointer hover:bg-white/5" onClick={() => startEdit(travel)}>
-              <div className="flex flex-col">
-                <span className="text-sm text-white/90">{travel.title || travel.location} <span className="text-xs text-white/50 border border-white/10 px-1 rounded ml-1">{travel.location}</span></span>
-                <span className="text-xs text-white/50">{travel.date}</span>
+        <div className="space-y-4 pt-6 border-t border-white/10">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-white/70">已有记录 ({filteredTravels.length}/{data.travels.length})</h3>
+            
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="搜索标题或地点..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-black/20 border border-white/10 rounded-full py-1.5 pl-8 pr-3 text-xs w-32 md:w-40 focus:outline-none focus:border-indigo-500/50"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
-              <button onClick={(e) => { e.stopPropagation(); deleteTravel(travel.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400">
-                <Trash2 className="w-4 h-4" />
+              
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                  showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
+                    ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                    : "bg-black/20 text-slate-300 border-white/10 hover:bg-white/10"
+                )}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                筛查
+                {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
+                  <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] ml-0.5">
+                    {(selectedYear ? 1 : 0) + (selectedMonth ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
+                  </span>
+                )}
               </button>
             </div>
-          ))}
+          </div>
+
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-black/20 p-4 rounded-xl space-y-4 border border-white/5 mt-2">
+                  {/* Year Filter */}
+                  {filterOptions.years.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar className="w-3 h-3" /> 按年份
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filterOptions.years.map(year => (
+                          <button
+                            key={year}
+                            type="button"
+                            onClick={() => handleYearChange(year)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                              selectedYear === year 
+                                ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20" 
+                                : "bg-white/5 text-slate-300 hover:bg-white/10"
+                            )}
+                          >
+                            {year}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Month Filter */}
+                  {selectedYear && filterOptions.months.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar className="w-3 h-3" /> 按月份
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filterOptions.months.map(month => (
+                          <button
+                            key={month}
+                            type="button"
+                            onClick={() => setSelectedMonth(selectedMonth === month ? null : month)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                              selectedMonth === month 
+                                ? "bg-purple-500 text-white shadow-md shadow-purple-500/20" 
+                                : "bg-white/5 text-slate-300 hover:bg-white/10"
+                            )}
+                          >
+                            {month}月
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location Filter */}
+                  {filterOptions.locations.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" /> 按地点 (多选)
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filterOptions.locations.map(loc => {
+                          const isSelected = selectedLocations.includes(loc);
+                          return (
+                            <button
+                              key={loc}
+                              type="button"
+                              onClick={() => toggleLocation(loc)}
+                              className={cn(
+                                "px-2.5 py-1 rounded-md text-xs font-medium transition-all border",
+                                isSelected 
+                                  ? "bg-teal-500/20 text-teal-300 border-teal-500/50" 
+                                  : "bg-white/5 text-slate-300 border-transparent hover:bg-white/10"
+                              )}
+                            >
+                              {loc}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reset Selection */}
+                  {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
+                    <div className="pt-2 border-t border-white/5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedYear(null);
+                          setSelectedMonth(null);
+                          setSelectedLocations([]);
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+                      >
+                        <X className="w-3 h-3" />
+                        重置所有筛选
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
+            {filteredTravels.length === 0 ? (
+              <p className="text-xs text-white/30 text-center py-4">无符合条件的记录</p>
+            ) : (
+              filteredTravels.map(travel => (
+                <div key={travel.id} className="flex items-center justify-between bg-black/20 border border-white/5 p-3 rounded-xl cursor-pointer hover:bg-white/5" onClick={() => startEdit(travel)}>
+                  <div className="flex flex-col truncate pr-2">
+                    <span className="text-sm text-white/90 truncate">{travel.title || travel.location} <span className="text-xs text-white/50 border border-white/10 px-1 rounded ml-1 shrink-0">{travel.location}</span></span>
+                    <span className="text-xs text-white/50">{travel.date}</span>
+                  </div>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); deleteTravel(travel.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </section>
