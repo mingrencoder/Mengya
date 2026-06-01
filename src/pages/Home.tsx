@@ -9,7 +9,7 @@ export function Home() {
   const { data, loading } = useData();
 
   if (loading || !data) {
-    return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-white/5" />;
+    return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
   }
 
   const { home } = data;
@@ -37,11 +37,11 @@ export function Home() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-slate-300 mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs font-medium text-slate-700 dark:text-slate-300 mb-3">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               系统在线
             </div>
-            <h1 className='text-4xl md:text-5xl font-bold text-white tracking-tight'>
+            <h1 className='text-4xl md:text-5xl font-bold text-slate-900 dark:text-white tracking-tight'>
               {home.title || "萌芽记录空间"}
             </h1>
           </motion.div>
@@ -57,17 +57,17 @@ export function Home() {
         <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 blur-[80px] rounded-full group-hover:bg-indigo-500/20 transition-all duration-700" />
         <div className="relative z-10 max-w-2xl">
           {home.welcomeMessage && (
-            <p className="text-2xl md:text-3xl font-light text-white italic tracking-wide mb-6">
+            <p className="text-2xl md:text-3xl font-light text-slate-800 dark:text-white italic tracking-wide mb-6">
               "{home.welcomeMessage}"
             </p>
           )}
           {home.description && (
-            <p className='text-lg text-slate-400 leading-relaxed font-light whitespace-pre-wrap'>
+            <p className='text-lg text-slate-600 dark:text-slate-400 leading-relaxed font-light whitespace-pre-wrap'>
               {home.description}
             </p>
           )}
           
-          <Link to="/travels" className="mt-8 flex items-center gap-3 text-sm text-white/50 hover:text-white transition-colors cursor-pointer w-fit group/link">
+          <Link to="/travels" className="mt-8 flex items-center gap-3 text-sm text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer w-fit group/link">
             探索旅程 <MoveRight className="w-4 h-4 transform group-hover/link:translate-x-1 transition-transform" />
           </Link>
         </div>
@@ -85,17 +85,17 @@ export function Home() {
               className="glass-card rounded-3xl p-6 flex flex-col items-start gap-4 overflow-hidden relative"
             >
               {block.type === 'image' && block.url ? (
-                <div className="w-full h-48 rounded-2xl overflow-hidden bg-black/20 mb-2 border border-white/5">
+                <div className="w-full h-48 rounded-2xl overflow-hidden bg-black/20 mb-2 border border-slate-200 dark:border-white/5">
                   <img src={block.url} alt="Block image" className="w-full h-full object-cover" loading="lazy" />
                 </div>
               ) : null}
               
               {block.title && (
-                <h3 className="font-semibold text-lg text-white tracking-tight">{block.title}</h3>
+                <h3 className="font-semibold text-lg text-slate-900 dark:text-white tracking-tight">{block.title}</h3>
               )}
               
               {block.content && (
-                <p className="text-sm text-slate-400 leading-relaxed whitespace-pre-wrap flex-1">
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap flex-1">
                   {block.content}
                 </p>
               )}

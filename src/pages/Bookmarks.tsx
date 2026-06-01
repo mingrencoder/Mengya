@@ -9,7 +9,7 @@ export function Bookmarks() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 12;
 
-  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-white/5" />;
+  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
 
   const bookmarks = data.bookmarks || [];
   const totalPages = Math.ceil(bookmarks.length / ITEMS_PER_PAGE);
@@ -23,14 +23,14 @@ export function Bookmarks() {
     <div className="space-y-8">
       <header className='flex items-end justify-between mb-8'>
         <div>
-          <h1 className='text-3xl font-bold text-white tracking-tight'>常用收藏</h1>
-          <p className='text-slate-400 mt-1'>工具、灵感与常用链接。</p>
+          <h1 className='text-3xl font-bold text-slate-900 dark:text-white tracking-tight'>常用收藏</h1>
+          <p className='text-slate-600 dark:text-slate-400 mt-1'>工具、灵感与常用链接。</p>
         </div>
       </header>
 
       {bookmarks.length === 0 ? (
         <div className="py-20 text-center glass-panel rounded-3xl border-dashed">
-          <p className="text-white/30">暂无收藏。</p>
+          <p className="text-slate-400 dark:text-white/30">暂无收藏。</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -47,13 +47,13 @@ export function Bookmarks() {
                 className="glass-card p-5 rounded-2xl flex flex-col h-full group"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-colors">
-                    <Bookmark className="w-4 h-4 text-white/70 group-hover:text-white" />
+                  <div className="w-10 h-10 rounded-full bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center group-hover:bg-slate-200/50 dark:bg-white/10 transition-colors">
+                    <Bookmark className="w-4 h-4 text-slate-600 dark:text-white/70 group-hover:text-slate-900 dark:hover:text-white" />
                   </div>
-                  <ExternalLink className="w-4 h-4 text-white/20 group-hover:text-white/60 transition-colors" />
+                  <ExternalLink className="w-4 h-4 text-slate-700 dark:text-white/20 group-hover:text-white/60 transition-colors" />
                 </div>
-                <h3 className="font-semibold text-white/90 mb-2 truncate">{bm.title}</h3>
-                <p className="text-sm text-white/40 leading-relaxed line-clamp-2 mt-auto">
+                <h3 className="font-semibold text-slate-800 dark:text-white/90 mb-2 truncate">{bm.title}</h3>
+                <p className="text-sm text-slate-500 dark:text-white/40 leading-relaxed line-clamp-2 mt-auto">
                   {bm.description}
                 </p>
               </motion.a>
@@ -65,7 +65,7 @@ export function Bookmarks() {
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-full glass border border-white/10 text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-full glass border border-white/10 text-white/70 hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label="上一页"
               >
                 <ChevronLeft className="w-5 h-5" />

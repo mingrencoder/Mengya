@@ -40,12 +40,12 @@ export function Admin() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-8 rounded-3xl w-full max-w-sm space-y-6">
-          <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-            <Lock className="w-5 h-5 text-white/70" />
+          <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center mx-auto">
+            <Lock className="w-5 h-5 text-slate-900 dark:text-white/70" />
           </div>
           <div className="text-center">
             <h2 className="text-xl font-semibold">管理员访问</h2>
-            <p className="text-sm text-white/50 mt-1">请输入密码以管理内容</p>
+            <p className="text-sm text-slate-500 dark:text-white/50 mt-1">请输入密码以管理内容</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -61,7 +61,7 @@ export function Admin() {
             {error && <p className="text-xs text-red-400 text-center">{error}</p>}
             <button
               type="submit"
-              className="w-full bg-white/10 hover:bg-white/20 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+              className="w-full bg-slate-200/50 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-white font-medium py-3 rounded-xl transition-colors text-sm"
             >
               登录
             </button>
@@ -76,11 +76,11 @@ export function Admin() {
       <header className='flex items-end justify-between mb-8'>
         <div>
           <h1 className='text-3xl font-bold text-white tracking-tight'>控制台</h1>
-          <p className='text-slate-400 mt-1'>管理您的萌芽空间。</p>
+          <p className='text-slate-600 dark:text-slate-400 mt-1'>管理您的萌芽空间。</p>
         </div>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition-colors text-white"
+          className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-white"
         >
           <LogOut className="w-4 h-4" />
           退出登录
@@ -218,7 +218,7 @@ function HomeEditor({ token }: { token: string }) {
             ) : form.avatarUrl ? (
               <img src={form.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
             ) : (
-              <Upload className="w-5 h-5 text-white/40" />
+              <Upload className="w-5 h-5 text-slate-500 dark:text-white/40" />
             )}
           </div>
           <div>
@@ -265,15 +265,15 @@ function HomeEditor({ token }: { token: string }) {
           
           <div className="space-y-4">
             {form.customBlocks?.map((block, i) => (
-              <div key={i} className="bg-black/20 border border-white/5 rounded-xl p-4 space-y-3 relative group">
-                <button type="button" onClick={() => removeBlock(i)} className="absolute top-3 right-3 text-white/30 hover:text-red-400 transition-colors">
+              <div key={i} className="bg-black/20 border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-3 relative group">
+                <button type="button" onClick={() => removeBlock(i)} className="absolute top-3 right-3 text-slate-400 dark:text-white/30 hover:text-red-400 transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
                 <div className="flex gap-4">
                   <select
                     value={block.type}
                     onChange={(e) => updateBlock(i, { type: e.target.value as 'text' | 'image' })}
-                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none text-white/80"
+                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-700 dark:text-white/80"
                   >
                     <option value="text">文案卡片</option>
                     <option value="image">图片卡片</option>
@@ -623,7 +623,7 @@ function TravelAdder({ token }: { token: string }) {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
                   showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
                     ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-                    : "bg-black/20 text-slate-300 border-white/10 hover:bg-white/10"
+                    : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
                 )}
               >
                 <Filter className="w-3.5 h-3.5" />

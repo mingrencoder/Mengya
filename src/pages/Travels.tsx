@@ -114,7 +114,7 @@ export function Travels() {
     return filteredTravels.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredTravels, currentPage]);
 
-  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-white/5" />;
+  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
 
   const openLightbox = (travel: any) => {
     setSelectedTravel(travel);
@@ -134,10 +134,10 @@ export function Travels() {
     <div className="space-y-8">
       <header className='flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8'>
         <div>
-          <h1 className='text-3xl font-bold text-white tracking-tight'>旅行记录</h1>
-          <p className='text-slate-400 mt-1 flex items-center gap-2'>
+          <h1 className='text-3xl font-bold text-slate-900 dark:text-white tracking-tight'>旅行记录</h1>
+          <p className='text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2'>
             <span>记录在世界各地的足迹。</span>
-            <span className="text-white/20">|</span>
+            <span className="text-slate-700 dark:text-white/20">|</span>
             <span>共 {filteredTravels.length} 条记录</span>
           </p>
         </div>
@@ -150,12 +150,12 @@ export function Travels() {
               placeholder="搜索标题或地点..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-full py-2 pl-9 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 focus:bg-white/10 transition-all w-full md:w-64"
+              className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full py-2 pl-9 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-200/50 dark:focus:bg-white/10 transition-all w-full md:w-64"
             />
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -167,7 +167,7 @@ export function Travels() {
               "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border",
               showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
                 ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-                : "bg-white/5 text-slate-300 border-white/10 hover:bg-white/10"
+                : "bg-white/5 text-slate-300 border-white/10 hover:bg-slate-200 dark:hover:bg-white/10"
             )}
           >
             <Filter className="w-4 h-4" />
@@ -219,7 +219,7 @@ export function Travels() {
 
               {/* Month Filter */}
               {selectedYear && filterOptions.months.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-white/5">
+                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
                   <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <Calendar className="w-3 h-3" />
                     按月份
@@ -281,7 +281,7 @@ export function Travels() {
                       setSelectedMonth(null);
                       setSelectedLocations([]);
                     }}
-                    className="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+                    className="text-xs text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1"
                   >
                     <X className="w-3 h-3" />
                     重置所有筛选
@@ -295,7 +295,7 @@ export function Travels() {
 
       {filteredTravels.length === 0 ? (
         <div className="py-20 text-center glass-panel rounded-3xl border-dashed">
-          <p className="text-white/30">没找到符合条件的旅行记录，换个搜索词或筛选条件试试吧。</p>
+          <p className="text-slate-400 dark:text-white/30">没找到符合条件的旅行记录，换个搜索词或筛选条件试试吧。</p>
           {(searchQuery || selectedYear || selectedMonth || selectedLocations.length > 0) && (
              <button
                onClick={() => {
@@ -337,23 +337,23 @@ export function Travels() {
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       loading="lazy"
                     />
-                    <div className='absolute top-3 right-3 glass px-2 py-1 rounded text-[10px] font-mono border border-white/10 z-20 text-white shadow-md bg-black/30 backdrop-blur-md'>
+                    <div className='absolute top-3 right-3 glass px-2 py-1 rounded text-[10px] font-mono border border-slate-200 dark:border-white/10 z-20 text-slate-900 dark:text-white shadow-md bg-white/80 dark:bg-black/30 backdrop-blur-md'>
                       {travel.date}
                     </div>
                     {travel.imageUrls && travel.imageUrls.length > 1 && (
-                       <div className="absolute bottom-3 right-3 glass px-2 py-1 rounded-full text-xs font-medium text-white z-20 flex items-center gap-1 shadow-lg backdrop-blur-md bg-black/40">
+                       <div className="absolute bottom-3 right-3 glass px-2 py-1 rounded-full text-xs font-medium text-slate-900 dark:text-white z-20 flex items-center gap-1 shadow-lg backdrop-blur-md bg-white/80 dark:bg-black/40">
                          +{travel.imageUrls.length - 1}张相片
                        </div>
                     )}
                   </div>
                 )}
                 {!coverImage && (
-                  <div className='absolute top-3 right-3 glass px-2 py-1 rounded text-[10px] font-mono border border-white/10 z-20 text-white shadow-sm bg-white/5'>
+                  <div className='absolute top-3 right-3 glass px-2 py-1 rounded text-[10px] font-mono border border-slate-200 dark:border-white/10 z-20 text-slate-900 dark:text-white shadow-sm bg-white/50 dark:bg-white/5'>
                     {travel.date}
                   </div>
                 )}
                 <div className="flex-1 mt-2">
-                  <h3 className="text-xl font-bold text-white mb-2">{travel.title || travel.location}</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{travel.title || travel.location}</h3>
                   {travel.description && (
                     <p className="text-sm text-slate-400 leading-relaxed line-clamp-2">
                       {travel.description}
@@ -379,7 +379,7 @@ export function Travels() {
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-full glass border border-white/10 text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label="上一页"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -405,7 +405,7 @@ export function Travels() {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-full glass border border-white/10 text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label="下一页"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -427,7 +427,7 @@ export function Travels() {
               onClick={() => setSelectedTravel(null)}
             >
               <button 
-                className="absolute top-6 right-6 p-4 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-50"
+                className="absolute top-6 right-6 p-4 rounded-full bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-white transition-colors z-50"
                 onClick={() => setSelectedTravel(null)}
               >
                 <X className="w-6 h-6" />

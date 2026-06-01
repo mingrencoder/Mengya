@@ -3,15 +3,17 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { Compass, Book, User, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
-
-const NAV_ITEMS = [
-  { path: '/', label: '首页简介', icon: User },
-  { path: '/travels', label: '旅行记录', icon: Compass },
-  { path: '/bookmarks', label: '常用收藏', icon: Book },
-];
+import { useSettings } from '../lib/SettingsContext';
 
 export function Layout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { t } = useSettings();
+
+  const NAV_ITEMS = [
+    { path: '/', label: t('nav.home'), icon: User },
+    { path: '/travels', label: t('nav.travels'), icon: Compass },
+    { path: '/bookmarks', label: t('nav.bookmarks'), icon: Book },
+  ];
 
   return (
     <div className="relative h-screen w-full flex overflow-hidden flex-col md:flex-row">
@@ -21,13 +23,13 @@ export function Layout() {
       {/* PC/Tablet Sidebar Navigation */}
       <aside 
         className={cn(
-          "hidden md:flex flex-col h-full fixed left-0 top-0 border-r border-white/10 glass z-50 py-6 transition-all duration-300",
+          "hidden md:flex flex-col h-full fixed left-0 top-0 border-r border-slate-200 dark:border-white/10 glass z-50 py-6 transition-all duration-300",
           isCollapsed ? "w-20 px-0" : "w-64 px-4"
         )}
       >
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute -right-3 top-8 bg-black/50 border border-white/10 rounded-full p-1 text-white/50 hover:text-white hover:bg-black z-50"
+          className="absolute -right-3 top-8 bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-full p-1 text-slate-400 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-black z-50"
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
@@ -36,11 +38,10 @@ export function Layout() {
           <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
             <span className="font-bold text-white text-xs">萌</span>
           </div>
-          {!isCollapsed && <span className="font-semibold text-white tracking-tight break-keep">萌芽</span>}
+          {!isCollapsed && <span className="font-semibold text-slate-900 dark:text-white tracking-tight break-keep">萌芽</span>}
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden">
-          {!isCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-4 mb-2">概览</div>}
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -55,14 +56,14 @@ export function Layout() {
         </nav>
 
         <div className="mt-auto pt-4 space-y-1 overflow-x-hidden">
-          {!isCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-4 mb-2">账户</div>}
+          {!isCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold px-4 mb-2">{t('nav.system')}</div>}
           <NavLink
-            to="/admin"
+            to="/settings"
             className={({ isActive }) => cn(isActive ? "sidebar-item-active" : "sidebar-item", isCollapsed ? "justify-center px-0 mx-4" : "")}
-            title={isCollapsed ? "后台管理" : undefined}
+            title={isCollapsed ? t('nav.settings') : undefined}
           >
             <Settings className="w-4 h-4 shrink-0" />
-            {!isCollapsed && <span className="break-keep">后台管理</span>}
+            {!isCollapsed && <span className="break-keep">{t('nav.settings')}</span>}
           </NavLink>
         </div>
       </aside>
@@ -90,7 +91,7 @@ export function Layout() {
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-1 p-3 rounded-xl transition-all duration-300',
-                isActive ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/80'
+                isActive ? 'text-slate-900 bg-slate-900/5 dark:text-white dark:bg-white/10' : 'text-slate-500 hover:text-slate-900 dark:text-white/40 dark:hover:text-white/80'
               )
             }
           >
@@ -99,16 +100,16 @@ export function Layout() {
           </NavLink>
         ))}
          <NavLink
-            to="/admin"
+            to="/settings"
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-1 p-3 rounded-xl transition-all duration-300',
-                isActive ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/80'
+                isActive ? 'text-slate-900 bg-slate-900/5 dark:text-white dark:bg-white/10' : 'text-slate-500 hover:text-slate-900 dark:text-white/40 dark:hover:text-white/80'
               )
             }
           >
             <Settings className="w-5 h-5" />
-            <span className="text-[10px] font-medium">后台管理</span>
+            <span className="text-[10px] font-medium">{t('nav.settings')}</span>
           </NavLink>
       </nav>
     </div>
