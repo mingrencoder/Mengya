@@ -2,81 +2,24 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { HomeData, TravelData, BookmarkData } from '../../src/types';
 
 dotenv.config();
 
 // Ensure 32 bytes key for AES-256-CBC
 const ENCRYPTION_KEY = process.env.STORAGE_ENCRYPTION_KEY || '12345678901234567890123456789012'; // Must be 256 bits (32 characters)
 const IV_LENGTH = 16; // For AES, this is always 16
-
-export interface PlatformData {
-  home: {
-    title: string;
-    description: string;
-    welcomeMessage: string;
-    avatarUrl?: string;
-  };
-  travels: Array<{
-    id: string;
-    location: string;
-    title: string;
-    date: string;
-    imageUrl?: string;
-    imageUrls?: string[];
-    coverImageIndex?: number;
-    description?: string;
-  }>;
-  bookmarks: Array<{
-    id: string;
-    title: string;
-    url: string;
-    description: string;
-    category?: string;
-  }>;
-  settings?: {
-    passwordHash: string;
-  };
-}
+const MAX_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB limit for sharding
 
 export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-const DEFAULT_DATA: PlatformData = {
-  home: {
-    title: "萌芽 - 记录生活与灵感",
-    description: "欢迎来到我的个人网络空间。",
-    welcomeMessage: "你好，生活记录者！"
-  },
-  travels: [],
-  bookmarks: [],
-  settings: {
-    passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'supersecretpassword')
-  }
-};
-
-export class StorageService {
-  private filePath: string;
-
-  constructor(filePath: string) {
-    this.filePath = path.resolve(process.cwd(), filePath);
-  }
-
-  // Ensure directory exists
-  public init() {
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // If file doesn't exist, create it with default data
-    if (!fs.existsSync(this.filePath)) {
-      this.write(DEFAULT_DATA);
-      console.log('Created default encrypted storage file.');
-    }
-  }
-
-  private encrypt(text: string): string {
+/**
+ * 核心存储类，提供基本的加密、解密和原子写入功能。
+ */
+export class CoreStorage {
+  static encrypt(text: string): string {
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let encrypted = cipher.update(text);
@@ -84,7 +27,7 @@ export class StorageService {
     return iv.toString('hex') + ':' + encrypted.toString('hex');
   }
 
-  private decrypt(text: string): string {
+  static decrypt(text: string): string {
     const textParts = text.split(':');
     const iv = Buffer.from(textParts.shift()!, 'hex');
     const encryptedText = Buffer.from(textParts.join(':'), 'hex');
@@ -94,31 +37,164 @@ export class StorageService {
     return decrypted.toString();
   }
 
-  public read(): PlatformData {
-    try {
-      if (!fs.existsSync(this.filePath)) {
-        return DEFAULT_DATA;
-      }
-      const encryptedData = fs.readFileSync(this.filePath, 'utf-8');
-      if (!encryptedData) {
-        return DEFAULT_DATA;
-      }
-      const decryptedString = this.decrypt(encryptedData);
-      return JSON.parse(decryptedString) as PlatformData;
-    } catch (error) {
-      console.error('Failed to read and decrypt data:', error);
-      return DEFAULT_DATA; // Return default if corrupted or failed
-    }
+  // 实现原子写入，防止服务中断造成的数据损坏
+  static writeAtomic(filePath: string, data: any) {
+    const tempPath = `${filePath}.tmp`;
+    const jsonString = JSON.stringify(data, null, 2);
+    const encryptedData = this.encrypt(jsonString);
+    fs.writeFileSync(tempPath, encryptedData, 'utf-8');
+    fs.renameSync(tempPath, filePath); // 绝对原子性的重命名覆盖
   }
 
-  public write(data: PlatformData): void {
+  static read(filePath: string): any {
+    if (!fs.existsSync(filePath)) return null;
     try {
-      const jsonString = JSON.stringify(data, null, 2);
-      const encryptedData = this.encrypt(jsonString);
-      fs.writeFileSync(this.filePath, encryptedData, 'utf-8');
-    } catch (error) {
-      console.error('Failed to encrypt and write data:', error);
-      throw new Error('Data storage write failed');
+      const encryptedData = fs.readFileSync(filePath, 'utf-8');
+      if (!encryptedData) return null;
+      const decryptedString = this.decrypt(encryptedData);
+      return JSON.parse(decryptedString);
+    } catch(e) {
+      console.error(`Failed to read/decrypt ${filePath}`, e);
+      return null;
     }
   }
 }
+
+/**
+ * 单例配置类，适用于 home，settings 等单独一份的数据配置。
+ */
+export class SingletonService<T> {
+  private filePath: string;
+  constructor(private name: string, private defaultData: T) {
+    this.filePath = path.resolve(process.cwd(), `data/${name}.json`);
+    this.init();
+  }
+
+  init() {
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(this.filePath)) {
+      this.write(this.defaultData);
+      console.log(`Created default encrypted file for ${this.name}`);
+    }
+  }
+
+  read(): T {
+    const data = CoreStorage.read(this.filePath);
+    return data || this.defaultData;
+  }
+
+  write(data: T) {
+    CoreStorage.writeAtomic(this.filePath, data);
+  }
+}
+
+/**
+ * 列表管理类，支持 Sharding 机制（分片）。
+ */
+export class CollectionService<T extends { id: string }> {
+  private dirPath: string;
+  constructor(private name: string) {
+    this.dirPath = path.resolve(process.cwd(), `data/${name}`);
+    if (!fs.existsSync(this.dirPath)) {
+      fs.mkdirSync(this.dirPath, { recursive: true });
+    }
+  }
+
+  // 获得所有有序的分片文件
+  private getChunks(): string[] {
+    if (!fs.existsSync(this.dirPath)) return [];
+    return fs.readdirSync(this.dirPath)
+      .filter(f => f.startsWith('chunk_') && f.endsWith('.json'))
+      .sort((a, b) => {
+        const numA = parseInt(a.replace('chunk_', '').replace('.json', ''), 10);
+        const numB = parseInt(b.replace('chunk_', '').replace('.json', ''), 10);
+        return numA - numB;
+      });
+  }
+
+  public readAll(): T[] {
+    const chunks = this.getChunks();
+    let allData: T[] = [];
+    for (const chunk of chunks) {
+      const filePath = path.join(this.dirPath, chunk);
+      const data = CoreStorage.read(filePath);
+      if (Array.isArray(data)) {
+        allData = allData.concat(data);
+      }
+    }
+    return allData;
+  }
+
+  public add(item: T) {
+    const chunks = this.getChunks();
+    let targetChunk = chunks.length > 0 ? chunks[chunks.length - 1] : null;
+    let targetPath = targetChunk ? path.join(this.dirPath, targetChunk) : null;
+    
+    let chunkData: T[] = [];
+    if (targetPath && fs.existsSync(targetPath)) {
+      const stat = fs.statSync(targetPath);
+      // 当超出 5MB 阈值，开辟新 chunk 分片
+      if (stat.size >= MAX_CHUNK_SIZE) {
+        const nextNum = parseInt(targetChunk!.replace('chunk_', ''), 10) + 1;
+        targetChunk = `chunk_${nextNum}.json`;
+        targetPath = path.join(this.dirPath, targetChunk);
+      } else {
+        chunkData = CoreStorage.read(targetPath) || [];
+      }
+    } else {
+      targetChunk = 'chunk_1.json';
+      targetPath = path.join(this.dirPath, targetChunk);
+    }
+
+    chunkData.push(item);
+    CoreStorage.writeAtomic(targetPath!, chunkData);
+  }
+
+  public update(id: string, partial: Partial<T>): T | null {
+    const chunks = this.getChunks();
+    for (const chunk of chunks) {
+      const filePath = path.join(this.dirPath, chunk);
+      const chunkData = CoreStorage.read(filePath) as T[];
+      if (!chunkData) continue;
+      
+      const index = chunkData.findIndex(i => i.id === id);
+      if (index !== -1) {
+        chunkData[index] = { ...chunkData[index], ...partial };
+        CoreStorage.writeAtomic(filePath, chunkData); // 仅原子重新写入包含该 id 的分片
+        return chunkData[index];
+      }
+    }
+    return null;
+  }
+
+  public delete(id: string): T | null {
+    const chunks = this.getChunks();
+    for (const chunk of chunks) {
+      const filePath = path.join(this.dirPath, chunk);
+      const chunkData = CoreStorage.read(filePath) as T[];
+      if (!chunkData) continue;
+      
+      const index = chunkData.findIndex(i => i.id === id);
+      if (index !== -1) {
+        const [deleted] = chunkData.splice(index, 1);
+        CoreStorage.writeAtomic(filePath, chunkData);
+        return deleted; // 返回已删除数据做后续清理
+      }
+    }
+    return null;
+  }
+}
+
+export const services = {
+  home: new SingletonService<HomeData>('home', {
+    title: "萌芽 - 记录生活与灵感",
+    description: "欢迎来到我的个人网络空间。",
+    welcomeMessage: "你好，生活记录者！"
+  }),
+  settings: new SingletonService<{passwordHash: string}>('settings', {
+    passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'supersecretpassword')
+  }),
+  travels: new CollectionService<TravelData>('travels'),
+  bookmarks: new CollectionService<BookmarkData>('bookmarks')
+};

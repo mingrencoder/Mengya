@@ -176,7 +176,7 @@ function HomeEditor({ token }: { token: string }) {
     if (avatarFile) {
       const formData = new FormData();
       formData.append('image', avatarFile);
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await fetch('/api/upload/common', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -197,7 +197,7 @@ function HomeEditor({ token }: { token: string }) {
     const formData = new FormData();
     formData.append('image', file);
     try {
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await fetch('/api/upload/common', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -524,7 +524,7 @@ function TravelAdder({ token }: { token: string }) {
       for (const file of files) {
         const formData = new FormData();
         formData.append('image', file);
-        const uploadRes = await fetch('/api/upload', {
+        const uploadRes = await fetch('/api/upload/travels', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
           body: formData

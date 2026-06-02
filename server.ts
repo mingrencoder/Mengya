@@ -3,7 +3,7 @@ import path from 'path';
 import cors from 'cors';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
-import { StorageService, hashPassword } from './server/services/StorageService';
+import { services, hashPassword } from './server/services/StorageService';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -18,36 +18,24 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 app.use(cors());
 app.use(express.json());
 
-// Initialize Storage
-const dataDir = path.resolve(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-const storageService = new StorageService(path.join(dataDir, 'content.json'));
-storageService.init();
+// Setup Multer for dynamic image uploads
+const uploadDirBase = path.resolve(process.cwd(), 'public/uploads');
 
-const currentData = storageService.read();
-if (!currentData.settings || !currentData.settings.passwordHash) {
-  currentData.settings = {
-    ...currentData.settings,
-    passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'supersecretpassword')
-  };
-  storageService.write(currentData);
-}
-
-// Setup Multer for image uploads
-const uploadDir = path.resolve(process.cwd(), 'public/uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => {
+    const moduleName = req.params.module || 'common';
+    const dir = path.join(uploadDirBase, moduleName);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
   filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 const upload = multer({ storage });
 
 // Expose public folder for uploads
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', express.static(uploadDirBase));
 
 // Authentication Middleware
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
@@ -68,9 +56,12 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 // --- Public APIs ---
 app.get('/api/data', (req, res) => {
   try {
-    const data = storageService.read();
-    const { settings, ...publicData } = data;
-    res.json(publicData);
+    const data = {
+      home: services.home.read(),
+      travels: services.travels.readAll(),
+      bookmarks: services.bookmarks.readAll()
+    };
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read data' });
   }
@@ -78,9 +69,8 @@ app.get('/api/data', (req, res) => {
 
 app.post('/api/auth/login', (req, res) => {
   const { password } = req.body;
-  const data = storageService.read();
-  const storedHash = data.settings?.passwordHash;
-  const match = storedHash === hashPassword(password);
+  const settings = services.settings.read();
+  const match = settings.passwordHash === hashPassword(password);
 
   if (match) {
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
@@ -96,9 +86,9 @@ app.put('/api/auth/password', authenticateToken, (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ error: 'Password required' });
-    const data = storageService.read();
-    data.settings = { ...data.settings, passwordHash: hashPassword(newPassword) };
-    storageService.write(data);
+    const settings = services.settings.read();
+    settings.passwordHash = hashPassword(newPassword);
+    services.settings.write(settings);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
@@ -108,10 +98,9 @@ app.put('/api/auth/password', authenticateToken, (req, res) => {
 // Update Home 
 app.put('/api/data/home', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
+    const oldHome = services.home.read();
     
     // Find old images
-    const oldHome = data.home || {};
     const extractHomeUrls = (homeObj: any) => {
       const urls: string[] = [];
       if (homeObj.avatarUrl) urls.push(homeObj.avatarUrl);
@@ -130,17 +119,15 @@ app.put('/api/data/home', authenticateToken, (req, res) => {
     // Delete missing files
     oldUrls.forEach(url => {
       if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
-        const fileName = url.replace('/uploads/', '');
-        const filePath = path.join(uploadDir, fileName);
+        const filePath = path.join(uploadDirBase, url.replace('/uploads/', ''));
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
       }
     });
 
-    data.home = newHome;
-    storageService.write(data);
-    res.json({ success: true, home: data.home });
+    services.home.write(newHome);
+    res.json({ success: true, home: newHome });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
   }
@@ -149,13 +136,11 @@ app.put('/api/data/home', authenticateToken, (req, res) => {
 // Travels
 app.post('/api/data/travels', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
     const newTravel = {
       id: Date.now().toString(),
       ...req.body
     };
-    data.travels.push(newTravel);
-    storageService.write(data);
+    services.travels.add(newTravel);
     res.json(newTravel);
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
@@ -164,22 +149,18 @@ app.post('/api/data/travels', authenticateToken, (req, res) => {
 
 app.delete('/api/data/travels/:id', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
-    const travel = data.travels.find(t => t.id === req.params.id);
+    const travel = services.travels.delete(req.params.id);
     if (travel) {
       const urlsToClean = travel.imageUrls || (travel.imageUrl ? [travel.imageUrl] : []);
       urlsToClean.forEach(url => {
         if (url && url.startsWith('/uploads/')) {
-          const fileName = url.replace('/uploads/', '');
-          const filePath = path.join(uploadDir, fileName);
+          const filePath = path.join(uploadDirBase, url.replace('/uploads/', ''));
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
           }
         }
       });
     }
-    data.travels = data.travels.filter(t => t.id !== req.params.id);
-    storageService.write(data);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
@@ -188,14 +169,16 @@ app.delete('/api/data/travels/:id', authenticateToken, (req, res) => {
 
 app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
-    const index = data.travels.findIndex(t => t.id === req.params.id);
-    if (index === -1) {
+    // We need to get old travel first to cleanup images. But our update method doesn't return old. 
+    // We can fetch all and find it, or update could return old and new. Let's just readAll.
+    const all = services.travels.readAll();
+    const oldTravel = all.find(t => t.id === req.params.id);
+    
+    if (!oldTravel) {
       return res.status(404).json({ error: 'Not found' });
     }
 
     // Find old images
-    const oldTravel = data.travels[index];
     const oldUrls = oldTravel.imageUrls || (oldTravel.imageUrl ? [oldTravel.imageUrl] : []);
     
     // Find new images
@@ -205,17 +188,15 @@ app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
     // Delete missing files
     oldUrls.forEach(url => {
       if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
-        const fileName = url.replace('/uploads/', '');
-        const filePath = path.join(uploadDir, fileName);
+        const filePath = path.join(uploadDirBase, url.replace('/uploads/', ''));
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
       }
     });
 
-    data.travels[index] = { ...oldTravel, ...newTravel };
-    storageService.write(data);
-    res.json(data.travels[index]);
+    const updated = services.travels.update(req.params.id, newTravel);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
   }
@@ -224,13 +205,11 @@ app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
 // Bookmarks
 app.post('/api/data/bookmarks', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
     const newBookmark = {
       id: Date.now().toString(),
       ...req.body
     };
-    data.bookmarks.push(newBookmark);
-    storageService.write(data);
+    services.bookmarks.add(newBookmark);
     res.json(newBookmark);
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
@@ -239,22 +218,21 @@ app.post('/api/data/bookmarks', authenticateToken, (req, res) => {
 
 app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
   try {
-    const data = storageService.read();
-    data.bookmarks = data.bookmarks.filter(b => b.id !== req.params.id);
-    storageService.write(data);
+    services.bookmarks.delete(req.params.id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
   }
 });
 
-// Upload endpoint
-app.post('/api/upload', authenticateToken, upload.single('image'), (req, res) => {
+// Upload endpoint with dynamic generic sub-directory routing
+app.post('/api/upload/:module', authenticateToken, upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
+  const moduleName = req.params.module || 'common';
   // Public URL to access the uploaded file
-  const imageUrl = `/uploads/${req.file.filename}`;
+  const imageUrl = `/uploads/${moduleName}/${req.file.filename}`;
   res.json({ url: imageUrl });
 });
 
