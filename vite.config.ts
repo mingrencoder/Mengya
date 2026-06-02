@@ -15,6 +15,9 @@ export default defineConfig(() => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      // 👇 新增这一行，允许你的自定义域名访问开发服务器
+      allowedHosts: ['mengya.cloud'],
+      allowedHosts: ['www.mengya.cloud'],
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },

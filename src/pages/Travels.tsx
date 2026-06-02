@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter } from 'lucide-react';
+import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -16,6 +16,7 @@ export function Travels() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
@@ -99,8 +100,11 @@ export function Travels() {
         : true;
 
       return matchesSearch && matchesYear && matchesMonth && matchesLocation;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [data?.travels, searchQuery, selectedYear, selectedMonth, selectedLocations]);
+    }).sort((a, b) => {
+      const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      return sortOrder === 'desc' ? diff : -diff;
+    });
+  }, [data?.travels, searchQuery, selectedYear, selectedMonth, selectedLocations, sortOrder]);
 
   // Reset page when filters change
   React.useEffect(() => {
@@ -161,6 +165,14 @@ export function Travels() {
               </button>
             )}
           </div>
+          <button
+            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="flex items-center justify-center p-2 rounded-full border border-white/10 bg-white/5 text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 transition-all font-medium"
+            title={sortOrder === 'desc' ? '当前：从新到旧 (点击切换)' : '当前：从旧到新 (点击切换)'}
+          >
+            {sortOrder === 'desc' ? <ArrowDownWideNarrow className="w-4 h-4" /> : <ArrowUpNarrowWide className="w-4 h-4" />}
+          </button>
+          
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(

@@ -4,6 +4,7 @@ import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calenda
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export function Admin() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
@@ -164,6 +165,7 @@ function HomeEditor({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<HomeData>(data ? data.home : { title: '', description: '', welcomeMessage: '', customBlocks: [] });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,9 +204,15 @@ function HomeEditor({ token }: { token: string }) {
   };
 
   const removeBlock = (index: number) => {
+    setDeleteConfirm(index);
+  };
+  
+  const confirmRemoveBlock = () => {
+    if (deleteConfirm === null) return;
     const newBlocks = [...(form.customBlocks || [])];
-    newBlocks.splice(index, 1);
+    newBlocks.splice(deleteConfirm, 1);
     setForm({ ...form, customBlocks: newBlocks });
+    setDeleteConfirm(null);
   };
 
   return (
@@ -316,6 +324,14 @@ function HomeEditor({ token }: { token: string }) {
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '保存设置'}
         </button>
       </form>
+
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        title="删除区块"
+        message="确定要删除这个自定义扩展区块吗？此操作不可逆。"
+        onConfirm={confirmRemoveBlock}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </section>
   );
 }
@@ -327,6 +343,7 @@ function TravelAdder({ token }: { token: string }) {
   const [form, setForm] = useState({ title: '', location: '', date: '', description: '', coverImageIndex: 0 });
   const [files, setFiles] = useState<File[]>([]);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -442,6 +459,15 @@ function TravelAdder({ token }: { token: string }) {
     if (form.coverImageIndex >= urls.length + files.length) {
       setForm({ ...form, coverImageIndex: Math.max(0, urls.length + files.length - 1) });
     }
+  };
+
+  const confirmDeleteTravel = async () => {
+    if (!deleteConfirm) return;
+    await deleteTravel(deleteConfirm);
+    if (editingId === deleteConfirm) {
+      cancelEdit();
+    }
+    setDeleteConfirm(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -576,9 +602,9 @@ function TravelAdder({ token }: { token: string }) {
             <button
               type="button"
               onClick={cancelEdit}
-              className="px-4 py-3 rounded-xl text-sm font-medium hover:bg-white/10 transition-colors text-white"
+              className="px-4 py-3 rounded-xl text-sm font-medium bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 transition-colors text-slate-800 dark:text-white"
             >
-              取消
+              取消编辑
             </button>
           )}
           <button
@@ -754,12 +780,12 @@ function TravelAdder({ token }: { token: string }) {
               <p className="text-xs text-white/30 text-center py-4">无符合条件的记录</p>
             ) : (
               filteredTravels.map(travel => (
-                <div key={travel.id} className="flex items-center justify-between bg-black/20 border border-white/5 p-3 rounded-xl cursor-pointer hover:bg-white/5" onClick={() => startEdit(travel)}>
+                <div key={travel.id} className={cn("flex items-center justify-between border p-3 rounded-xl cursor-pointer transition-colors", editingId === travel.id ? "bg-indigo-500/20 border-indigo-500/50" : "bg-black/20 border-white/5 hover:bg-white/5")} onClick={() => editingId === travel.id ? cancelEdit() : startEdit(travel)}>
                   <div className="flex flex-col truncate pr-2">
                     <span className="text-sm text-white/90 truncate">{travel.title || travel.location} <span className="text-xs text-white/50 border border-white/10 px-1 rounded ml-1 shrink-0">{travel.location}</span></span>
                     <span className="text-xs text-white/50">{travel.date}</span>
                   </div>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); deleteTravel(travel.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirm(travel.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -768,6 +794,14 @@ function TravelAdder({ token }: { token: string }) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        title="删除旅行记录"
+        message="确定要删除这条旅行记录吗？一旦删除将无法恢复，关联的服务器图片也会被永久移除。"
+        onConfirm={confirmDeleteTravel}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </section>
   );
 }
@@ -776,6 +810,7 @@ function BookmarkAdder({ token }: { token: string }) {
   const { data, addBookmark, deleteBookmark } = useData();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ title: '', url: '', description: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -783,6 +818,12 @@ function BookmarkAdder({ token }: { token: string }) {
     await addBookmark(form);
     setForm({ title: '', url: '', description: '' });
     setLoading(false);
+  };
+
+  const confirmDeleteBookmark = async () => {
+    if (!deleteConfirm) return;
+    await deleteBookmark(deleteConfirm);
+    setDeleteConfirm(null);
   };
 
   return (
@@ -830,13 +871,21 @@ function BookmarkAdder({ token }: { token: string }) {
                 <span className="text-sm text-white/90 truncate">{bookmark.title}</span>
                 <span className="text-xs text-indigo-400 truncate hover:underline cursor-pointer">{bookmark.url}</span>
               </div>
-              <button onClick={() => deleteBookmark(bookmark.id)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
+              <button onClick={() => setDeleteConfirm(bookmark.id)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        title="删除书签"
+        message="确定要删除这个书签吗？"
+        onConfirm={confirmDeleteBookmark}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </section>
   );
 }

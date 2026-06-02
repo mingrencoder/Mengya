@@ -45,7 +45,7 @@ export function hashPassword(password: string): string {
 const DEFAULT_DATA: PlatformData = {
   home: {
     title: "萌芽 - 记录生活与灵感",
-    description: "欢迎来到我的个人网络空间。基于无数据库架构，带来极简、安全、本地化的体验。",
+    description: "欢迎来到我的个人网络空间。",
     welcomeMessage: "你好，生活记录者！"
   },
   travels: [],

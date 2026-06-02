@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Compass, Book, User, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { useSettings } from '../lib/SettingsContext';
+import { useData } from '../lib/DataContext';
 
 export function Layout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { t } = useSettings();
+  const { refresh } = useData();
+  const location = useLocation();
+
+  useEffect(() => {
+    refresh();
+  }, [location.pathname]); // Auto-refresh data on page switch
 
   const NAV_ITEMS = [
     { path: '/', label: t('nav.home'), icon: User },

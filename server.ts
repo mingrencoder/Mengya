@@ -11,7 +11,7 @@ import fs from 'fs';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
@@ -136,6 +136,19 @@ app.post('/api/data/travels', authenticateToken, (req, res) => {
 app.delete('/api/data/travels/:id', authenticateToken, (req, res) => {
   try {
     const data = storageService.read();
+    const travel = data.travels.find(t => t.id === req.params.id);
+    if (travel) {
+      const urlsToClean = travel.imageUrls || (travel.imageUrl ? [travel.imageUrl] : []);
+      urlsToClean.forEach(url => {
+        if (url && url.startsWith('/uploads/')) {
+          const fileName = url.replace('/uploads/', '');
+          const filePath = path.join(uploadDir, fileName);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      });
+    }
     data.travels = data.travels.filter(t => t.id !== req.params.id);
     storageService.write(data);
     res.json({ success: true });
