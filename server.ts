@@ -7,6 +7,7 @@ import { services, hashPassword } from './server/services/StorageService';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import AdmZip from 'adm-zip';
 
 dotenv.config();
 
@@ -40,7 +41,11 @@ app.use('/uploads', express.static(uploadDirBase));
 // Authentication Middleware
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+
+  if (!token && req.query.token) {
+    token = req.query.token as string;
+  }
 
   if (!token) return res.sendStatus(401);
 
@@ -222,6 +227,111 @@ app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
+  }
+});
+
+app.get('/api/data/export', authenticateToken, (req, res) => {
+  try {
+    const homeData = services.home.read();
+    const travelsData = services.travels.readAll();
+    const bookmarksData = services.bookmarks.readAll();
+
+    const referencedUrls = new Set<string>();
+    if (homeData.avatarUrl) referencedUrls.add(homeData.avatarUrl);
+    if (homeData.customBlocks && Array.isArray(homeData.customBlocks)) {
+      homeData.customBlocks.forEach((b: any) => {
+        if (b.type === 'image' && b.url) referencedUrls.add(b.url);
+      });
+    }
+    travelsData.forEach(t => {
+      if (t.imageUrl) referencedUrls.add(t.imageUrl);
+      if (t.imageUrls) t.imageUrls.forEach(u => referencedUrls.add(u));
+    });
+    bookmarksData.forEach(b => {
+      if ((b as any).iconUrl) referencedUrls.add((b as any).iconUrl);
+      if ((b as any).coverUrl) referencedUrls.add((b as any).coverUrl);
+    });
+
+    const walkSync = (dir: string, filelist: string[] = []) => {
+      if (!fs.existsSync(dir)) return filelist;
+      fs.readdirSync(dir).forEach(file => {
+        const filepath = path.join(dir, file);
+        if (fs.statSync(filepath).isDirectory()) {
+          filelist = walkSync(filepath, filelist);
+        } else {
+          filelist.push(filepath);
+        }
+      });
+      return filelist;
+    };
+
+    if (fs.existsSync(uploadDirBase)) {
+      const allFiles = walkSync(uploadDirBase);
+      allFiles.forEach(file => {
+        const relativePath = '/uploads/' + path.relative(uploadDirBase, file).replace(/\\/g, '/');
+        if (!referencedUrls.has(relativePath)) {
+          fs.unlinkSync(file);
+        }
+      });
+    }
+
+    const zip = new AdmZip();
+
+    const dataDir = path.resolve(process.cwd(), 'data');
+    if (fs.existsSync(dataDir)) {
+      zip.addLocalFolder(dataDir, 'data');
+    }
+
+    const uploadDir = path.resolve(process.cwd(), 'public/uploads');
+    if (fs.existsSync(uploadDir)) {
+      zip.addLocalFolder(uploadDir, 'public/uploads');
+    }
+
+    const buffer = zip.toBuffer();
+    res.attachment('export.zip');
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message, stack: error.stack });
+  }
+});
+
+app.post('/api/data/import', authenticateToken, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const zip = new AdmZip(req.file.path);
+    const extractDir = path.resolve(process.cwd(), 'temp_extract_' + Date.now());
+    
+    zip.extractAllTo(extractDir, true);
+
+    const extractedDataDir = path.join(extractDir, 'data');
+    if (fs.existsSync(extractedDataDir)) {
+      const targetDataDir = path.resolve(process.cwd(), 'data');
+      if (!fs.existsSync(targetDataDir)) fs.mkdirSync(targetDataDir, { recursive: true });
+      fs.cpSync(extractedDataDir, targetDataDir, { recursive: true });
+    }
+
+    const extractedUploadsDir = path.join(extractDir, 'public/uploads');
+    if (fs.existsSync(extractedUploadsDir)) {
+      const targetUploadsDir = path.resolve(process.cwd(), 'public/uploads');
+      if (!fs.existsSync(targetUploadsDir)) fs.mkdirSync(targetUploadsDir, { recursive: true });
+      fs.cpSync(extractedUploadsDir, targetUploadsDir, { recursive: true });
+    }
+
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    fs.unlinkSync(req.file.path);
+
+    // Refresh context data will be handled by client fetching /api/data again
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Import error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Failed to import' });
   }
 });
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
@@ -92,6 +92,7 @@ export function Admin() {
         <div className="space-y-8">
           <HomeEditor token={token} />
           <PasswordEditor token={token} />
+          <DataExportImport token={token} />
         </div>
         <div className="space-y-8">
           <TravelAdder token={token} />
@@ -99,6 +100,94 @@ export function Admin() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DataExportImport({ token }: { token: string }) {
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState('');
+  const { refresh } = useData();
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch('/api/data/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'export.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        setMessage('导出失败');
+      }
+    } catch {
+      setMessage('发生错误');
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setMessage('');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/data/import', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      
+      if (res.ok) {
+        setMessage('导入成功！正在刷新数据...');
+        await refresh();
+        setTimeout(() => setMessage(''), 3000);
+      } else {
+        setMessage('导入失败');
+      }
+    } catch {
+      setMessage('发生错误');
+    } finally {
+      setImporting(false);
+      e.target.value = ''; // Reset input
+    }
+  };
+
+  return (
+    <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 flex-1 h-fit">
+      <h2 className="text-xl font-medium">数据备份与恢复</h2>
+      <p className="text-sm text-white/50">将您的所有数据及上传的照片打包为 ZIP 文件下载，或从 ZIP 文件恢复您的数据及照片。</p>
+      
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="px-6 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+        >
+          导出数据包 (ZIP)
+        </button>
+        
+        <label className={cn(
+          "px-6 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
+          importing && "opacity-50 pointer-events-none"
+        )}>
+          {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : '导入数据包 (ZIP)'}
+          <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
+        </label>
+      </div>
+      
+      {message && <p className={cn("text-sm mt-2", message.includes('成功') ? "text-emerald-400" : "text-red-400")}>{message}</p>}
+    </section>
   );
 }
 
@@ -236,6 +325,25 @@ function HomeEditor({ token }: { token: string }) {
     setDeleteConfirm(null);
   };
 
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (sourceIndex === targetIndex || isNaN(sourceIndex)) return;
+
+    const newBlocks = [...(form.customBlocks || [])];
+    const [movedBlock] = newBlocks.splice(sourceIndex, 1);
+    newBlocks.splice(targetIndex, 0, movedBlock);
+    setForm({ ...form, customBlocks: newBlocks });
+  };
+
   return (
     <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 flex-1 h-fit">
       <h2 className="text-xl font-medium">首页设置</h2>
@@ -294,7 +402,17 @@ function HomeEditor({ token }: { token: string }) {
           
           <div className="space-y-4">
             {form.customBlocks?.map((block, i) => (
-              <div key={i} className="bg-black/20 border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-3 relative group">
+              <div 
+                key={block.id || i} 
+                draggable
+                onDragStart={(e) => handleDragStart(e, i)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, i)}
+                className="bg-black/20 border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-3 relative group"
+              >
+                <div className="absolute top-3 right-10 cursor-move text-slate-400 dark:text-white/30 hover:text-white transition-colors" title="拖动排序">
+                  <GripVertical className="w-4 h-4" />
+                </div>
                 <button type="button" onClick={() => removeBlock(i)} className="absolute top-3 right-3 text-slate-400 dark:text-white/30 hover:text-red-400 transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -328,14 +446,19 @@ function HomeEditor({ token }: { token: string }) {
                   <div className="mt-2 space-y-2 relative">
                     <div className="flex items-center gap-4">
                       {block.url && (
-                        <div className="w-12 h-12 rounded-lg bg-black/40 border border-white/10 shrink-0 overflow-hidden">
+                        <div className="w-12 h-12 rounded-lg bg-black/40 border border-white/10 shrink-0 overflow-hidden relative group/img">
                           <img src={block.url} alt="preview" className="w-full h-full object-cover" />
                         </div>
                       )}
                       <label className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer hover:bg-white/10 transition-colors inline-block text-slate-700 dark:text-white/80">
-                        上传文件
+                        {block.url ? '重新上传' : '上传文件'}
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadBlockImage(i, e.target.files?.[0] || null)} />
                       </label>
+                      {block.url && (
+                        <button type="button" onClick={() => updateBlock(i, { url: '' })} className="text-xs text-red-500 hover:text-red-400 transition-colors border border-red-500/30 bg-red-500/10 px-2 py-1 rounded">
+                          删除照片
+                        </button>
+                      )}
                     </div>
                     <input
                       placeholder="或输入图片链接 URL"
