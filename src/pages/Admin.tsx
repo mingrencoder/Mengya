@@ -192,6 +192,27 @@ function HomeEditor({ token }: { token: string }) {
     setAvatarFile(null);
   };
 
+  const handleUploadBlockImage = async (index: number, file: File | null) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        updateBlock(index, { url: uploadData.url });
+      } else {
+        alert('上传失败');
+      }
+    } catch {
+      alert('上传发生错误');
+    }
+  };
+
   const addBlock = () => {
     const newBlock: CustomBlock = { id: Date.now().toString(), type: 'text', title: '', content: '' };
     setForm({ ...form, customBlocks: [...(form.customBlocks || []), newBlock] });
@@ -304,12 +325,25 @@ function HomeEditor({ token }: { token: string }) {
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 transition-colors resize-none mt-2"
                   />
                 ) : (
-                  <input
-                    placeholder="图片链接 URL"
-                    value={block.url || ''}
-                    onChange={(e) => updateBlock(i, { url: e.target.value })}
-                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 transition-colors mt-2"
-                  />
+                  <div className="mt-2 space-y-2 relative">
+                    <div className="flex items-center gap-4">
+                      {block.url && (
+                        <div className="w-12 h-12 rounded-lg bg-black/40 border border-white/10 shrink-0 overflow-hidden">
+                          <img src={block.url} alt="preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <label className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer hover:bg-white/10 transition-colors inline-block text-slate-700 dark:text-white/80">
+                        上传文件
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadBlockImage(i, e.target.files?.[0] || null)} />
+                      </label>
+                    </div>
+                    <input
+                      placeholder="或输入图片链接 URL"
+                      value={block.url || ''}
+                      onChange={(e) => updateBlock(i, { url: e.target.value })}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 transition-colors mt-2"
+                    />
+                  </div>
                 )}
               </div>
             ))}
@@ -448,7 +482,17 @@ function TravelAdder({ token }: { token: string }) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      setFiles(prev => [...prev, ...Array.from(e.target.files as FileList)]);
+    }
+  };
+
+  const handleRemoveNewImage = (index: number) => {
+    const newFiles = [...files];
+    newFiles.splice(index, 1);
+    setFiles(newFiles);
+    const totalCount = existingImageUrls.length + newFiles.length;
+    if (form.coverImageIndex >= totalCount) {
+      setForm({ ...form, coverImageIndex: Math.max(0, totalCount - 1) });
     }
   };
 
@@ -456,8 +500,9 @@ function TravelAdder({ token }: { token: string }) {
     const urls = [...existingImageUrls];
     urls.splice(index, 1);
     setExistingImageUrls(urls);
-    if (form.coverImageIndex >= urls.length + files.length) {
-      setForm({ ...form, coverImageIndex: Math.max(0, urls.length + files.length - 1) });
+    const totalCount = urls.length + files.length;
+    if (form.coverImageIndex >= totalCount) {
+      setForm({ ...form, coverImageIndex: Math.max(0, totalCount - 1) });
     }
   };
 
@@ -591,6 +636,7 @@ function TravelAdder({ token }: { token: string }) {
                {files.map((file, i) => (
                  <div key={`new-${i}`} onClick={() => setForm({...form, coverImageIndex: existingImageUrls.length + i})} className={cn("relative w-20 h-20 rounded-lg overflow-hidden shrink-0 cursor-pointer border-2", form.coverImageIndex === existingImageUrls.length + i ? "border-indigo-500" : "border-transparent")}>
                    <img src={URL.createObjectURL(file)} className="w-full h-full object-cover opacity-70" />
+                   <button type="button" onClick={(e) => { e.stopPropagation(); handleRemoveNewImage(i); }} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1"><X className="w-3 h-3" /></button>
                  </div>
                ))}
              </div>

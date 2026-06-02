@@ -9,15 +9,15 @@ export function Bookmarks() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 12;
 
-  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
-
-  const bookmarks = data.bookmarks || [];
+  const bookmarks = data?.bookmarks || [];
   const totalPages = Math.ceil(bookmarks.length / ITEMS_PER_PAGE);
 
   const currentBookmarks = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return bookmarks.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [bookmarks, currentPage]);
+
+  if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
 
   return (
     <div className="space-y-8">
