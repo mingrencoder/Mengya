@@ -109,7 +109,36 @@ app.put('/api/auth/password', authenticateToken, (req, res) => {
 app.put('/api/data/home', authenticateToken, (req, res) => {
   try {
     const data = storageService.read();
-    data.home = { ...data.home, ...req.body };
+    
+    // Find old images
+    const oldHome = data.home || {};
+    const extractHomeUrls = (homeObj: any) => {
+      const urls: string[] = [];
+      if (homeObj.avatarUrl) urls.push(homeObj.avatarUrl);
+      if (homeObj.customBlocks && Array.isArray(homeObj.customBlocks)) {
+        homeObj.customBlocks.forEach((b: any) => {
+          if (b.type === 'image' && b.url) urls.push(b.url);
+        });
+      }
+      return urls;
+    };
+    const oldUrls = extractHomeUrls(oldHome);
+    
+    const newHome = { ...oldHome, ...req.body };
+    const newUrls = extractHomeUrls(newHome);
+    
+    // Delete missing files
+    oldUrls.forEach(url => {
+      if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
+        const fileName = url.replace('/uploads/', '');
+        const filePath = path.join(uploadDir, fileName);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    });
+
+    data.home = newHome;
     storageService.write(data);
     res.json({ success: true, home: data.home });
   } catch (error) {
@@ -164,7 +193,27 @@ app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
     if (index === -1) {
       return res.status(404).json({ error: 'Not found' });
     }
-    data.travels[index] = { ...data.travels[index], ...req.body };
+
+    // Find old images
+    const oldTravel = data.travels[index];
+    const oldUrls = oldTravel.imageUrls || (oldTravel.imageUrl ? [oldTravel.imageUrl] : []);
+    
+    // Find new images
+    const newTravel = req.body;
+    const newUrls = newTravel.imageUrls || (newTravel.imageUrl ? [newTravel.imageUrl] : []);
+    
+    // Delete missing files
+    oldUrls.forEach(url => {
+      if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
+        const fileName = url.replace('/uploads/', '');
+        const filePath = path.join(uploadDir, fileName);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    });
+
+    data.travels[index] = { ...oldTravel, ...newTravel };
     storageService.write(data);
     res.json(data.travels[index]);
   } catch (error) {
