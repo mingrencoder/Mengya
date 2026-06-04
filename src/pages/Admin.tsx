@@ -293,36 +293,55 @@ function HomeEditor({ token }: { token: string }) {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
+  // Message Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalIsError, setModalIsError] = useState(false);
+  const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
+
+  const showMessage = (msg: string, isErr: boolean = false, cb?: () => void) => {
+    setModalMessage(msg);
+    setModalIsError(isErr);
+    if (cb) setModalCallback(() => cb);
+    else setModalCallback(null);
+    setModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     let avatarUrl = form.avatarUrl;
 
-    if (avatarFile) {
-      const formData = new FormData();
-      formData.append('image', avatarFile);
-      const uploadRes = await fetch('/api/upload/common', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      if (!uploadRes.ok) {
-        setLoading(false);
-        throw new Error('头像上传失败，可能是登录已过期');
+    try {
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append('image', avatarFile);
+        const uploadRes = await fetch('/api/upload/common', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        if (!uploadRes.ok) {
+          throw new Error('头像上传失败，可能是登录已过期');
+        }
+        const uploadData = await uploadRes.json();
+        avatarUrl = uploadData.url;
       }
-      const uploadData = await uploadRes.json();
-      avatarUrl = uploadData.url;
-    }
 
-    const success = await updateHomeConfig({ ...form, avatarUrl });
-    if (!success) {
+      const success = await updateHomeConfig({ ...form, avatarUrl });
+      if (!success) {
+        throw new Error('配置更新失败，请重试或刷新登录');
+      }
+      
+      showMessage('首页设置保存成功', false, () => {
+        setAvatarFile(null);
+      });
+    } catch (err: any) {
+      showMessage(err.message || '发生错误', true);
+    } finally {
       setLoading(false);
-      throw new Error('配置更新失败，请重试或刷新登录');
     }
-    
-    setLoading(false);
-    setAvatarFile(null);
   };
 
   const handleUploadBlockImage = async (index: number, file: File | null) => {
@@ -341,7 +360,7 @@ function HomeEditor({ token }: { token: string }) {
       const uploadData = await uploadRes.json();
       updateBlock(index, { url: uploadData.url });
     } catch {
-      alert('上传发生错误');
+      showMessage('上传发生错误', true);
     }
   };
 
@@ -532,6 +551,16 @@ function HomeEditor({ token }: { token: string }) {
         onConfirm={confirmRemoveBlock}
         onCancel={() => setDeleteConfirm(null)}
       />
+
+      <MessageModal 
+        isOpen={modalOpen} 
+        isError={modalIsError} 
+        message={modalMessage} 
+        onClose={() => {
+          setModalOpen(false);
+          if (modalCallback) modalCallback();
+        }} 
+      />
     </section>
   );
 }
@@ -700,10 +729,12 @@ function TravelAdder({ token }: { token: string }) {
       if (!success) {
         throw new Error('删除失败，请刷新登录');
       }
-      if (editingId === deleteConfirm) {
-        cancelEdit();
-      }
-      showMessage('旅行记录已删除', false, () => window.location.reload());
+      showMessage('旅行记录已删除', false, () => {
+        if (editingId === deleteConfirm) {
+          cancelEdit();
+        }
+        window.location.reload();
+      });
     } catch (e: any) {
       showMessage(e.message || '删除失败', true);
     }
@@ -746,14 +777,18 @@ function TravelAdder({ token }: { token: string }) {
       if (editingId && updateTravel) {
         const success = await updateTravel(editingId, payload);
         if (!success) throw new Error('更新失败，请刷新登录');
-        showMessage('旅行记录更新成功', false, () => window.location.reload());
+        showMessage('旅行记录更新成功', false, () => {
+          cancelEdit();
+          window.location.reload();
+        });
       } else {
         const success = await addTravel(payload);
         if (!success) throw new Error('添加失败，请刷新登录');
-        showMessage('旅行记录添加成功', false, () => window.location.reload());
+        showMessage('旅行记录添加成功', false, () => {
+          cancelEdit();
+          window.location.reload();
+        });
       }
-
-      cancelEdit();
     } catch (e: any) {
       showMessage(e.message || '失败', true);
     } finally {
@@ -1193,8 +1228,10 @@ function BookmarkAdder({ token }: { token: string }) {
     try {
       const success = await addBookmark(form);
       if (!success) throw new Error('添加失败，请刷新登录');
-      setForm({ title: '', url: '', description: '' });
-      showMessage('书签添加成功', false, () => window.location.reload());
+      showMessage('书签添加成功', false, () => {
+        setForm({ title: '', url: '', description: '' });
+        window.location.reload();
+      });
     } catch (err: any) {
       showMessage(err.message || '添加失败', true);
     }
