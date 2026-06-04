@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle, Home, Map, Bookmark, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
@@ -47,6 +47,13 @@ export function Admin() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'home' | 'travels' | 'bookmarks' | 'settings'>(
+    (localStorage.getItem('admin_active_tab') as any) || 'home'
+  );
+
+  useEffect(() => {
+    localStorage.setItem('admin_active_tab', activeTab);
+  }, [activeTab]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,31 +117,97 @@ export function Admin() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className='flex items-end justify-between mb-8'>
-        <div>
-          <h1 className='text-3xl font-bold text-white tracking-tight'>控制台</h1>
-          <p className='text-slate-600 dark:text-slate-400 mt-1'>管理您的萌芽空间。</p>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-white"
-        >
-          <LogOut className="w-4 h-4" />
-          退出登录
-        </button>
-      </header>
+    <div className="flex flex-col lg:flex-row gap-8 min-h-[70vh]">
+      {/* Sidebar Navigation */}
+      <div className="w-full lg:w-64 shrink-0 space-y-2 flex flex-col">
+          <div className="mb-6 px-2">
+            <h1 className='text-3xl font-bold text-slate-900 dark:text-white tracking-tight'>控制台</h1>
+            <p className='text-slate-600 dark:text-slate-400 mt-1 text-sm'>管理您的系统模块</p>
+          </div>
+          
+          <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+             <button
+                onClick={() => setActiveTab('home')}
+                className={cn(
+                   "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all whitespace-nowrap",
+                   activeTab === 'home' 
+                      ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                      : "bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5"
+                )}
+             >
+                <Home className="w-5 h-5" /> 首页设置
+             </button>
+             <button
+                onClick={() => setActiveTab('travels')}
+                className={cn(
+                   "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all whitespace-nowrap",
+                   activeTab === 'travels' 
+                      ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                      : "bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5"
+                )}
+             >
+                <Map className="w-5 h-5" /> 旅行记录
+             </button>
+             <button
+                onClick={() => setActiveTab('bookmarks')}
+                className={cn(
+                   "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all whitespace-nowrap",
+                   activeTab === 'bookmarks' 
+                      ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                      : "bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5"
+                )}
+             >
+                <Bookmark className="w-5 h-5" /> 书签管理
+             </button>
+             <button
+                onClick={() => setActiveTab('settings')}
+                className={cn(
+                   "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all whitespace-nowrap",
+                   activeTab === 'settings' 
+                      ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                      : "bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5"
+                )}
+             >
+                <Settings className="w-5 h-5" /> 系统设置
+             </button>
+          </nav>
+          
+          <div className="mt-auto pt-6 lg:pt-12 px-2">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-sm hover:bg-slate-300 dark:hover:bg-white/10 transition-colors text-slate-700 dark:text-white w-full justify-center"
+            >
+              <LogOut className="w-4 h-4" />
+              退出登录
+            </button>
+          </div>
+      </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <div className="space-y-8">
-          <HomeEditor token={token} />
-          <PasswordEditor token={token} />
-          <DataExportImport token={token} />
-        </div>
-        <div className="space-y-8">
-          <TravelAdder token={token} />
-          <BookmarkAdder token={token} />
-        </div>
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0">
+        <AnimatePresence mode="wait">
+           {activeTab === 'home' && (
+             <motion.div key="home" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="w-full max-w-4xl">
+               <HomeEditor token={token} />
+             </motion.div>
+           )}
+           {activeTab === 'travels' && (
+             <motion.div key="travels" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+               <TravelAdder token={token} />
+             </motion.div>
+           )}
+           {activeTab === 'bookmarks' && (
+             <motion.div key="bookmarks" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+               <BookmarkAdder token={token} />
+             </motion.div>
+           )}
+           {activeTab === 'settings' && (
+             <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="space-y-8 w-full max-w-xl">
+               <PasswordEditor token={token} />
+               <DataExportImport token={token} />
+             </motion.div>
+           )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -142,10 +215,24 @@ export function Admin() {
 
 function DataExportImport({ token }: { token: string }) {
   const [importing, setImporting] = useState(false);
-  const [message, setMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
   const { refresh } = useData();
 
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalIsError, setModalIsError] = useState(false);
+  const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
+
+  const showMessage = (msg: string, isErr: boolean = false, cb?: () => void) => {
+    setModalMessage(msg);
+    setModalIsError(isErr);
+    if (cb) setModalCallback(() => cb);
+    else setModalCallback(null);
+    setModalOpen(true);
+  };
+
   const handleExport = async () => {
+    setExporting(true);
     try {
       const res = await fetch('/api/data/export', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -160,11 +247,15 @@ function DataExportImport({ token }: { token: string }) {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        showMessage('导出成功', false);
       } else {
-        setMessage('导出失败');
+        const errData = await res.json().catch(() => ({}));
+        showMessage(errData.error || '导出失败', true);
       }
     } catch {
-      setMessage('发生错误');
+      showMessage('发生错误，或网络连接失败', true);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -173,8 +264,6 @@ function DataExportImport({ token }: { token: string }) {
     if (!file) return;
 
     setImporting(true);
-    setMessage('');
-    
     const formData = new FormData();
     formData.append('file', file);
 
@@ -186,14 +275,14 @@ function DataExportImport({ token }: { token: string }) {
       });
       
       if (res.ok) {
-        setMessage('导入成功！正在刷新数据...');
         await refresh();
-        setTimeout(() => setMessage(''), 3000);
+        showMessage('导入成功！数据已更新', false);
       } else {
-        setMessage('导入失败');
+        const errData = await res.json().catch(() => ({}));
+        showMessage(errData.error || '导入失败', true);
       }
     } catch {
-      setMessage('发生错误');
+      showMessage('发生错误，或网络连接失败', true);
     } finally {
       setImporting(false);
       e.target.value = ''; // Reset input
@@ -203,27 +292,36 @@ function DataExportImport({ token }: { token: string }) {
   return (
     <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 flex-1 h-fit">
       <h2 className="text-xl font-medium">数据备份与恢复</h2>
-      <p className="text-sm text-white/50">将您的所有数据及上传的照片打包为 ZIP 文件下载，或从 ZIP 文件恢复您的数据及照片。</p>
+      <p className="text-sm text-slate-600 dark:text-white/50">将您的所有数据及上传的照片打包为 ZIP 文件下载，或从 ZIP 文件恢复您的数据及照片。</p>
       
       <div className="flex items-center gap-4">
         <button
           type="button"
           onClick={handleExport}
-          className="px-6 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+          disabled={exporting || importing}
+          className="px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          导出数据包 (ZIP)
+          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : '导出数据包 (ZIP)'}
         </button>
         
         <label className={cn(
-          "px-6 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
-          importing && "opacity-50 pointer-events-none"
+          "px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
+          (importing || exporting) && "opacity-50 pointer-events-none"
         )}>
           {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : '导入数据包 (ZIP)'}
           <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
         </label>
       </div>
-      
-      {message && <p className={cn("text-sm mt-2", message.includes('成功') ? "text-emerald-400" : "text-red-400")}>{message}</p>}
+
+      <MessageModal 
+        isOpen={modalOpen} 
+        isError={modalIsError} 
+        message={modalMessage} 
+        onClose={() => {
+          setModalOpen(false);
+          if (modalCallback) modalCallback();
+        }} 
+      />
     </section>
   );
 }
@@ -878,19 +976,9 @@ function TravelAdder({ token }: { token: string }) {
             />
             <label
               htmlFor="file-upload"
-              className={cn(
-                "flex flex-col items-center justify-center w-full aspect-[21/9] rounded-xl border-2 border-dashed transition-colors cursor-pointer",
-                files.length > 0 ? "border-indigo-500/50 bg-indigo-500/5" : "border-white/10 hover:border-white/20 bg-black/20"
-              )}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/10 transition-colors cursor-pointer text-slate-700 dark:text-white"
             >
-              {files.length > 0 ? (
-                <span className="text-sm text-indigo-300">已选择 {files.length} 张图片</span>
-              ) : (
-                <>
-                  <Upload className="w-6 h-6 text-white/40 mb-2" />
-                  <span className="text-sm text-white/40">点击此处选择上传多张图片</span>
-                </>
-              )}
+              <Upload className="w-4 h-4" /> 选择照片上传 ({files.length > 0 ? `已选 ${files.length} 张` : '未选择'})
             </label>
           </div>
         </div>
@@ -1158,7 +1246,10 @@ function TravelAdder({ token }: { token: string }) {
                   </div>
                   <div className="flex flex-col truncate pr-2 flex-1">
                     <span className="text-sm text-white/90 truncate flex items-center gap-2">
-                       {travel.title || travel.location} 
+                       {travel.title || travel.location}
+                       <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1 rounded border border-sky-500/30 shrink-0">
+                         {travel.imageUrls ? travel.imageUrls.length : (travel.imageUrl ? 1 : 0)} 张照片
+                       </span>
                        {travel.bookmarked && <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-1 rounded border border-yellow-500/30">收藏</span>}
                        <span className="text-xs text-white/50 border border-white/10 px-1 rounded shrink-0">{travel.location}</span>
                     </span>

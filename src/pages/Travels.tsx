@@ -14,6 +14,7 @@ export function Travels() {
   const { data, loading } = useData();
   const [selectedTravel, setSelectedTravel] = useState<any>(null);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,7 +28,7 @@ export function Travels() {
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [viewMode, setViewMode] = useState<'grid' | 'timeline' | 'story'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'timeline' | 'gallery' | 'story'>('grid');
   const [coverFlowIndex, setCoverFlowIndex] = useState(0);
   
   const [currentPage, setCurrentPage] = useState(1);
@@ -192,6 +193,58 @@ export function Travels() {
     return filteredTravels.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredTravels, currentPage]);
 
+  const touchStartX = React.useRef<number | null>(null);
+  const touchEndX = React.useRef<number | null>(null);
+  const touchStartTime = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+    touchStartTime.current = Date.now();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const timeTaken = Date.now() - (touchStartTime.current || 0);
+    const velocity = Math.abs(distance / Math.max(timeTaken, 1));
+    
+    let shift = 0;
+    // Lower threshold so slower swipes still work. Use swipe velocity for fast jumps
+    if (distance > 30) {
+      shift = velocity > 1 ? 2 : 1;
+    } else if (distance < -30) {
+      shift = velocity > 1 ? -2 : -1;
+    }
+
+    if (shift !== 0) {
+      setCoverFlowIndex(prev => {
+        const next = Math.max(0, Math.min(prev + shift, paginatedTravels.length - 1));
+        return next;
+      });
+    }
+    
+    touchStartX.current = null;
+    touchEndX.current = null;
+    touchStartTime.current = null;
+  };
+
+  React.useEffect(() => {
+    if (viewMode !== 'gallery') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        setCoverFlowIndex(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+         setCoverFlowIndex(prev => Math.min(paginatedTravels.length - 1, prev + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewMode, paginatedTravels.length]);
+
   if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
 
   const openLightbox = (travel: any) => {
@@ -210,6 +263,7 @@ export function Travels() {
 
   return (
     <div className="space-y-6">
+      <div className="sticky -top-8 z-40 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md pt-8 pb-4 border-b border-transparent transition-all">
       <header className='flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6'>
         <div>
           <h1 className='text-3xl font-bold text-slate-900 dark:text-white tracking-tight'>旅行记录</h1>
@@ -273,6 +327,18 @@ export function Travels() {
               <List className="w-4 h-4" />
             </button>
             <button
+              onClick={() => setViewMode('gallery')}
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                viewMode === 'gallery' 
+                  ? "bg-white dark:bg-white/10 text-indigo-500 dark:text-indigo-400 shadow-sm" 
+                  : "text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              )}
+              title="3D 画廊视图"
+            >
+              <Images className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setViewMode('story')}
               className={cn(
                 "p-1.5 rounded-full transition-all",
@@ -314,235 +380,198 @@ export function Travels() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="glass p-5 rounded-2xl mb-6 space-y-4 border border-white/10">
+            <div className="glass p-4 rounded-xl mb-4 space-y-3 border border-white/10 text-sm shadow-sm relative">
               
-              {/* Year Filter */}
-              {filterOptions.years.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="w-3 h-3" />
-                    按年度
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {filterOptions.years.map(year => (
-                      <button
-                        key={year}
-                        onClick={() => handleYearChange(year)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                          selectedYear === year 
-                            ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
-                            : "bg-white/5 text-slate-300 hover:bg-white/10"
-                        )}
-                      >
-                        {year}年
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Quarter Filter */}
-              {selectedYear && filterOptions.quarters.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="w-3 h-3" />
-                    按季度
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {filterOptions.quarters.map(quarter => (
-                      <button
-                        key={quarter}
-                        onClick={() => handleQuarterChange(quarter)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                          selectedQuarter === quarter 
-                            ? "bg-teal-500 text-white shadow-lg shadow-teal-500/20" 
-                            : "bg-white/5 text-slate-300 hover:bg-white/10"
-                        )}
-                      >
-                        第{quarter}季度
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Month Filter */}
-              {selectedYear && filterOptions.months.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="w-3 h-3" />
-                    按月度
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {filterOptions.months.map(month => (
-                      <button
-                        key={month}
-                        onClick={() => setSelectedMonth(selectedMonth === month ? null : month)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                          selectedMonth === month 
-                            ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20" 
-                            : "bg-white/5 text-slate-300 hover:bg-white/10"
-                        )}
-                      >
-                        {month}月
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Location Filter */}
-              {filterOptions.locations.length > 0 && (
-                <div className="space-y-3 pt-2 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                      <MapPin className="w-3 h-3" />
-                      按地点 (多选)
-                    </div>
-                    {/* Location Search Input */}
-                    <div className="relative">
-                      <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input 
-                        type="text"
-                        placeholder="搜索地点..."
-                        value={locationSearch}
-                        onChange={(e) => setLocationSearch(e.target.value)}
-                        className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full py-1 pl-7 pr-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 w-32 md:w-48 transition-all"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2 pb-1">
-                    {displayLocations.map(loc => {
-                      const isSelected = selectedLocations.includes(loc);
-                      return (
-                        <button
-                          key={loc}
-                          onClick={() => toggleLocation(loc)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-md text-xs font-medium transition-all border",
-                            isSelected 
-                              ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/50" 
-                              : "bg-white/5 text-slate-300 border-transparent hover:bg-white/10"
-                          )}
-                        >
-                          {loc}
-                        </button>
-                      );
-                    })}
-                    {displayLocations.length === 0 && (
-                      <span className="text-xs text-slate-500 italic py-1">未找到匹配地点</span>
-                    )}
-                  </div>
-                  {/* Selected Locations Tags */}
-                  {selectedLocations.length > 0 && (
-                    <div className="flex flex-wrap text-xs gap-1 mt-2">
-                       <span className="text-slate-500 content-center mr-1">已选：</span>
-                       {selectedLocations.map(loc => (
-                         <span key={loc} className="inline-flex items-center gap-1 bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
-                           {loc}
-                           <button onClick={() => toggleLocation(loc)} className="hover:text-indigo-100 rounded-full p-0.5">
-                             <X className="w-2.5 h-2.5" />
+              {/* Row 1: Time (Year, Quarter, Month) */}
+              <div className="flex flex-wrap items-start gap-4">
+                 {/* Year */}
+                 {filterOptions.years.length > 0 && (
+                    <div className="flex items-center gap-2">
+                       <span className="text-xs font-semibold text-slate-400 w-10 shrink-0">年度</span>
+                       <div className="flex flex-wrap gap-1">
+                         {filterOptions.years.map(year => (
+                           <button
+                             key={year}
+                             onClick={() => handleYearChange(year)}
+                             className={cn(
+                               "px-2.5 py-1 rounded-md text-xs transition-all border border-transparent",
+                               selectedYear === year 
+                                 ? "bg-indigo-500/20 text-indigo-500 font-bold border-indigo-500/50" 
+                                 : "bg-white/5 text-slate-400 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10"
+                             )}
+                           >
+                             {year}年
                            </button>
-                         </span>
-                       ))}
-                       <button onClick={() => setSelectedLocations([])} className="text-slate-400 hover:text-white px-2 py-0.5 ml-1 transition-colors">
-                         清除地点
-                       </button>
+                         ))}
+                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+                 )}
 
-              {/* Tags Filter */}
-              {filterOptions.tags && filterOptions.tags.length > 0 && (
-                <div className="space-y-3 pt-2 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                      <Tag className="w-3 h-3" />
-                      按标签 (多选)
+                 {/* Quarter */}
+                 {selectedYear && filterOptions.quarters.length > 0 && (
+                    <div className="flex items-center gap-2 md:border-l md:border-slate-300 md:dark:border-white/10 md:pl-4">
+                       <span className="text-xs font-semibold text-slate-400 w-10 shrink-0">季度</span>
+                       <div className="flex flex-wrap gap-1">
+                         {filterOptions.quarters.map(quarter => (
+                           <button
+                             key={quarter}
+                             onClick={() => handleQuarterChange(quarter)}
+                             className={cn(
+                               "px-2.5 py-1 rounded-md text-xs transition-all border border-transparent",
+                               selectedQuarter === quarter 
+                                 ? "bg-teal-500/20 text-teal-600 dark:text-teal-400 font-bold border-teal-500/50" 
+                                 : "bg-white/5 text-slate-400 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10"
+                             )}
+                           >
+                             第{quarter}季度
+                           </button>
+                         ))}
+                       </div>
                     </div>
-                    {/* Tag Search Input */}
-                    <div className="relative">
-                      <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input 
-                        type="text"
-                        placeholder="搜索标签..."
-                        value={tagSearch}
-                        onChange={(e) => setTagSearch(e.target.value)}
-                        className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full py-1 pl-7 pr-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 w-32 md:w-48 transition-all"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2 pb-1">
-                    {filterOptions.tags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => {
-                      const isSelected = selectedTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-md text-xs font-medium transition-all border",
-                            isSelected 
-                              ? "bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/50" 
-                              : "bg-white/5 text-slate-300 border-transparent hover:bg-white/10"
-                          )}
-                        >
-                          {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                 )}
 
-              {/* Bookmark Toggle */}
-              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Star className="w-3 h-3" />
-                  只显示收藏记录
-                </div>
-                <button
-                  onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
-                  className={cn(
-                    "w-10 h-5 rounded-full relative transition-colors border",
-                    showBookmarkedOnly ? "bg-yellow-500 border-yellow-400" : "bg-white/10 border-transparent"
-                  )}
-                >
-                  <div className={cn(
-                    "w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm",
-                    showBookmarkedOnly ? "left-5" : "left-1"
-                  )} />
-                </button>
+                 {/* Month */}
+                 {selectedYear && filterOptions.months.length > 0 && (
+                    <div className="flex items-center gap-2 md:border-l md:border-slate-300 md:dark:border-white/10 md:pl-4">
+                       <span className="text-xs font-semibold text-slate-400 w-10 shrink-0">月度</span>
+                       <div className="flex flex-wrap gap-1">
+                         {filterOptions.months.map(month => (
+                           <button
+                             key={month}
+                             onClick={() => setSelectedMonth(selectedMonth === month ? null : month)}
+                             className={cn(
+                               "px-2.5 py-1 rounded-md text-xs transition-all border border-transparent",
+                               selectedMonth === month 
+                                 ? "bg-purple-500/20 text-purple-600 dark:text-purple-400 font-bold border-purple-500/50" 
+                                 : "bg-white/5 text-slate-400 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10"
+                             )}
+                           >
+                             {month}月
+                           </button>
+                         ))}
+                       </div>
+                    </div>
+                 )}
               </div>
 
-              {/* Reset All Filters */}
-              {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
-                <div className="pt-3 border-t border-white/5 flex justify-end">
-                  <button
-                    onClick={() => {
-                      setSelectedYear(null);
-                      setSelectedQuarter(null);
-                      setSelectedMonth(null);
-                      setSelectedLocations([]);
-                      setSelectedTags([]);
-                      setShowBookmarkedOnly(false);
-                      setLocationSearch('');
-                      setTagSearch('');
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1"
-                  >
-                    <X className="w-3 h-3" />
-                    重置所有筛选
-                  </button>
-                </div>
-              )}
+              {/* Row 2: Location, Tag, Favorite */}
+              <div className="flex flex-wrap items-start gap-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                 {/* Locations */}
+                 {filterOptions.locations.length > 0 && (
+                    <div className="flex items-start gap-2 flex-1 min-w-[200px]">
+                       <span className="text-xs font-semibold text-slate-400 w-10 shrink-0 pt-1.5">地点</span>
+                       <div className="flex-1 flex flex-col gap-2">
+                          <div className="relative">
+                            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input 
+                              type="text"
+                              placeholder="搜索地点..."
+                              value={locationSearch}
+                              onChange={(e) => setLocationSearch(e.target.value)}
+                              className="bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-md py-1 pl-6 pr-2 text-xs w-full max-w-[120px] focus:outline-none focus:border-indigo-500/50"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                            {displayLocations.map(loc => {
+                              const isSelected = selectedLocations.includes(loc);
+                              return (
+                                <button
+                                  key={loc}
+                                  onClick={() => toggleLocation(loc)}
+                                  className={cn(
+                                    "px-2 py-1 rounded text-[10px] font-medium transition-all border",
+                                    isSelected 
+                                      ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/50" 
+                                      : "bg-white/5 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10"
+                                  )}
+                                >
+                                  {loc}
+                                </button>
+                              );
+                            })}
+                            {displayLocations.length === 0 && <span className="text-xs text-slate-500">无记录</span>}
+                          </div>
+                       </div>
+                    </div>
+                 )}
+
+                 {/* Tags */}
+                 {filterOptions.tags && filterOptions.tags.length > 0 && (
+                    <div className="flex items-start gap-2 flex-1 min-w-[200px] md:border-l md:border-slate-300 md:dark:border-white/10 md:pl-4">
+                       <span className="text-xs font-semibold text-slate-400 w-10 shrink-0 pt-1.5">标签</span>
+                       <div className="flex-1 flex flex-col gap-2">
+                          <div className="relative">
+                            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input 
+                              type="text"
+                              placeholder="搜索标签..."
+                              value={tagSearch}
+                              onChange={(e) => setTagSearch(e.target.value)}
+                              className="bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-md py-1 pl-6 pr-2 text-xs w-full max-w-[120px] focus:outline-none focus:border-indigo-500/50"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                            {filterOptions.tags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => {
+                              const isSelected = selectedTags.includes(tag);
+                              return (
+                                <button
+                                  key={tag}
+                                  onClick={() => toggleTag(tag)}
+                                  className={cn(
+                                    "px-2 py-1 rounded text-[10px] font-medium transition-all border",
+                                    isSelected 
+                                      ? "bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/50" 
+                                      : "bg-white/5 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10"
+                                  )}
+                                >
+                                  {tag}
+                                </button>
+                              );
+                            })}
+                          </div>
+                       </div>
+                    </div>
+                 )}
+
+                 {/* Bookmark Toggle */}
+                 <div className="flex flex-col gap-3 md:border-l md:border-slate-300 md:dark:border-white/10 md:pl-4 min-w-[120px]">
+                    <div className="text-xs font-semibold text-slate-400 flex items-center gap-2">
+                      <Star className="w-3 h-3" /> 其他
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={showBookmarkedOnly}
+                        onChange={(e) => setShowBookmarkedOnly(e.target.checked)}
+                        className="rounded border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-black/20 w-4 h-4 text-indigo-500 focus:ring-indigo-500/50 transition-colors"
+                      />
+                      只显示收藏记录
+                    </label>
+
+                    {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
+                       <button 
+                         onClick={() => {
+                           setSelectedYear(null);
+                           setSelectedQuarter(null);
+                           setSelectedMonth(null);
+                           setSelectedLocations([]);
+                           setSelectedTags([]);
+                           setShowBookmarkedOnly(false);
+                           setLocationSearch('');
+                           setTagSearch('');
+                         }} 
+                         className="text-[10px] bg-red-500/10 text-red-500 hover:bg-red-500/20 px-2 py-1 rounded flex items-center justify-center gap-1 mt-2 border border-red-500/20 max-w-fit"
+                       >
+                          <X className="w-2.5 h-2.5" /> 重置筛选
+                       </button>
+                    )}
+                 </div>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       {filteredTravels.length === 0 ? (
         <div className="py-20 text-center glass rounded-3xl border border-dashed border-white/10">
@@ -591,7 +620,8 @@ export function Travels() {
 
               <div className="space-y-12">
                 {paginatedTravels.map((travel, i) => {
-                  const coverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                  const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                  const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
                   const isLeft = i % 2 !== 0; // Alternating logic: Even index -> right side (md:flex-row is default, card is in 2nd slot), Odd index -> left side
                   
                   return (
@@ -632,6 +662,7 @@ export function Travels() {
                                 alt={travel.location}
                                 className="w-full h-full max-h-[250px] object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                                 loading="lazy"
+                                onError={() => setFailedImages(prev => ({ ...prev, [travel.id]: true }))}
                               />
                               {travel.imageUrls && travel.imageUrls.length > 1 && (
                                 <div className="absolute bottom-2 right-2 glass px-2 py-1 rounded-full text-[10px] font-medium text-slate-900 dark:text-white z-20 flex items-center gap-1 shadow-md backdrop-blur-md bg-white/80 dark:bg-black/40">
@@ -686,7 +717,8 @@ export function Travels() {
           {viewMode === 'grid' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {paginatedTravels.map((travel, i) => {
-                const coverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
               
               return (
                 <motion.div
@@ -708,6 +740,7 @@ export function Travels() {
                         alt={travel.location}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         loading="lazy"
+                        onError={() => setFailedImages(prev => ({ ...prev, [travel.id]: true }))}
                       />
                       <div className='absolute top-2 right-2 glass px-1.5 py-0.5 rounded text-[9px] font-mono border border-slate-200 dark:border-white/10 z-20 text-slate-900 dark:text-white shadow-sm bg-white/80 dark:bg-black/30 backdrop-blur-md'>
                         {travel.date}
@@ -757,10 +790,131 @@ export function Travels() {
             </div>
           )}
 
+          {viewMode === 'gallery' && (
+            <div 
+              className="flex flex-col items-center py-10 mt-8 min-h-[600px] overflow-hidden select-none outline-none target-gallery no-tap-highlight"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div className="relative w-full max-w-5xl h-[450px] md:h-[500px] flex items-center justify-center pointer-events-none" style={{ perspective: '1200px' }}>
+                {paginatedTravels.map((travel, index) => {
+                  const offset = index - coverFlowIndex;
+                  const absOffset = Math.abs(offset);
+                  const zIndex = 50 - absOffset;
+                  const scale = 1 - Math.min(absOffset * 0.15, 0.6);
+                  const translateX = offset * 45; // 45% shift
+                  const rotateY = offset === 0 ? 0 : offset > 0 ? -25 : 25;
+                  const translateZ = absOffset * -100;
+                  
+                  const opacity = 1 - Math.min(absOffset * 0.3, 0.8);
+                  const blur = absOffset > 0 ? `${absOffset * 2}px` : '0px';
+
+                  const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                  const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
+                  const pointerEvents = absOffset <= 2 ? 'auto' : 'none';
+
+                  return (
+                    <div 
+                      key={`gallery-${travel.id}`}
+                      onClick={() => {
+                        if (offset === 0) {
+                          openLightbox(travel);
+                        } else {
+                          setCoverFlowIndex(index);
+                        }
+                      }}
+                      className={cn(
+                        "absolute transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]",
+                        offset === 0 ? "cursor-pointer" : "cursor-pointer hover:shadow-2xl hover:shadow-indigo-500/10 border-white/10"
+                      )}
+                      style={{
+                        zIndex,
+                        transform: `translateX(${translateX}%) translateZ(${translateZ}px) rotateY(${rotateY}deg) scale(${scale})`,
+                        opacity,
+                        filter: `blur(${blur})`,
+                        width: '100%',
+                        maxWidth: '720px',
+                        aspectRatio: '16/9',
+                        pointerEvents,
+                        transformStyle: 'preserve-3d'
+                      }}
+                    >
+                       <div className="w-full h-full bg-[#0a0a0a] rounded-3xl overflow-hidden border border-white/10 flex flex-col shadow-2xl relative group">
+                          {coverImage ? (
+                            <img src={coverImage} alt={travel.location} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-105 pointer-events-none" draggable={false} loading="lazy" onError={() => setFailedImages(prev => ({ ...prev, [travel.id]: true }))} />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white/30 bg-white/5 pointer-events-none">暂无图片</div>
+                          )}
+                          <div className="absolute inset-x-0 bottom-0 top-1/2 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent pointer-events-none" />
+                          <div className="absolute bottom-0 inset-x-0 p-6 pointer-events-none z-10 text-center md:text-left">
+                             <div className="font-mono text-xs text-indigo-400 mb-2 drop-shadow-md">{travel.date}</div>
+                             <h3 className="text-2xl font-bold text-white leading-tight drop-shadow-md">{travel.title || travel.location}</h3>
+                             <div className="flex items-center justify-center md:justify-start gap-1.5 mt-3 text-white/80 text-sm font-medium">
+                                <MapPin className="w-4 h-4 text-indigo-400" /> {travel.location}
+                             </div>
+                          </div>
+                          {travel.imageUrls && travel.imageUrls.length > 1 && (
+                            <div className="absolute top-4 right-4 glass px-2 py-1 rounded-full text-[10px] font-medium text-white z-20 flex items-center gap-1 shadow-md backdrop-blur-md bg-black/40 border border-white/10">
+                              +{travel.imageUrls.length - 1}图
+                            </div>
+                          )}
+                       </div>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              <div className="mt-12 flex flex-col items-center gap-6 max-w-2xl px-6 w-full z-20">
+                 <div className="flex items-center gap-6">
+                   <button 
+                     onClick={() => setCoverFlowIndex(prev => Math.max(prev - 1, 0))}
+                     disabled={coverFlowIndex === 0}
+                     className="w-12 h-12 rounded-full glass border border-white/10 shadow-lg backdrop-blur-xl bg-white/5 flex items-center justify-center text-slate-300 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+                   >
+                     <ChevronLeft className="w-5 h-5" />
+                   </button>
+                   <div className="text-slate-500 dark:text-slate-400 font-mono text-sm tracking-widest">
+                     {String(coverFlowIndex + 1).padStart(2, '0')} / {String(paginatedTravels.length).padStart(2, '0')}
+                   </div>
+                   <button 
+                     onClick={() => setCoverFlowIndex(prev => Math.min(prev + 1, paginatedTravels.length - 1))}
+                     disabled={coverFlowIndex === paginatedTravels.length - 1}
+                     className="w-12 h-12 rounded-full glass border border-white/10 shadow-lg backdrop-blur-xl bg-white/5 flex items-center justify-center text-slate-300 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+                   >
+                     <ChevronRight className="w-5 h-5" />
+                   </button>
+                 </div>
+                 
+                 <AnimatePresence mode="wait">
+                   {paginatedTravels[coverFlowIndex]?.description && (
+                     <motion.p 
+                       key={`desc-${paginatedTravels[coverFlowIndex]?.id}`}
+                       initial={{ opacity: 0, y: 5 }}
+                       animate={{ opacity: 1, y: 0 }}
+                       exit={{ opacity: 0, y: -5 }}
+                       className="text-slate-600 dark:text-slate-400 text-center leading-relaxed text-sm md:text-base mt-2"
+                     >
+                        {paginatedTravels[coverFlowIndex].description}
+                     </motion.p>
+                   )}
+                 </AnimatePresence>
+                 
+                 <button 
+                   onClick={() => openLightbox(paginatedTravels[coverFlowIndex])}
+                   className="mt-2 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-400 dark:hover:text-indigo-300 transition-colors underline underline-offset-4"
+                 >
+                   全屏查看当前记录
+                 </button>
+              </div>
+            </div>
+          )}
+
           {viewMode === 'story' && (
              <div className="space-y-16 md:space-y-0 py-8 md:py-16">
                 {paginatedTravels.map((travel, index) => {
-                   const coverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                   const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                   const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
                    return (
                       <div key={`story-${travel.id}`} className="flex flex-col md:flex-row gap-8 md:gap-16 items-start relative min-h-[60vh] border-b border-slate-200 dark:border-white/5 pb-16 md:pb-32 md:py-24 last:border-0 last:pb-0 pt-0 first:pt-0">
                          {/* Left: Sticky Text */}
@@ -806,6 +960,7 @@ export function Travels() {
                                        alt={travel.location} 
                                        className="w-full h-auto min-h-[300px] md:min-h-[500px] object-cover transition-transform duration-1000 group-hover:scale-[1.02]"
                                        loading="lazy"
+                                       onError={() => setFailedImages(prev => ({ ...prev, [travel.id]: true }))}
                                     />
                                  ) : (
                                     <div className="w-full h-[300px] md:h-[500px] flex items-center justify-center text-slate-400 dark:text-white/30">

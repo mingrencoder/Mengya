@@ -29,7 +29,7 @@ export function Home() {
               transition={{ delay: 0.1, type: "spring" }}
               className="w-20 h-20 md:w-24 md:h-24 shrink-0 rounded-2xl md:rounded-3xl overflow-hidden glass p-1 shadow-2xl"
             >
-              <img src={home.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-xl md:rounded-2xl bg-black/50" />
+              <img src={home.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-xl md:rounded-2xl bg-black/50" onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.display = 'none'; }} />
             </motion.div>
           )}
           <motion.div
@@ -86,7 +86,7 @@ export function Home() {
             >
               {block.type === 'image' && block.url ? (
                 <div className="w-full h-48 rounded-2xl overflow-hidden bg-black/20 mb-2 border border-slate-200 dark:border-white/5">
-                  <img src={block.url} alt="Block image" className="w-full h-full object-cover" loading="lazy" />
+                  <img src={block.url} alt="Block image" className="w-full h-full object-cover" loading="lazy" onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.display = 'none'; }} />
                 </div>
               ) : null}
               
