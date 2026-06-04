@@ -1,9 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List } from 'lucide-react';
+import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { EffectCoverflow, Keyboard, Mousewheel, FreeMode } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/effect-coverflow';
+import 'swiper/css/free-mode';
 
 export function Travels() {
   const { data, loading } = useData();
@@ -17,24 +22,35 @@ export function Travels() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [locationSearch, setLocationSearch] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagSearch, setTagSearch] = useState('');
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'timeline' | 'story'>('grid');
+  const [coverFlowIndex, setCoverFlowIndex] = useState(0);
   
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 12;
 
+  // Reset cover flow index when pagination or filters change
+  React.useEffect(() => {
+    setCoverFlowIndex(0);
+  }, [currentPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
+
   // Extract filter options
   const filterOptions = useMemo(() => {
-    if (!data?.travels) return { years: [], quarters: [], months: [], locations: [] };
+    if (!data?.travels) return { years: [], quarters: [], months: [], locations: [], tags: [] };
     
     const years = new Set<string>();
     const quarters = new Set<string>();
     const months = new Set<string>();
     const locations = new Set<string>();
+    const tags = new Set<string>();
 
     data.travels.forEach(t => {
       if (t.location) locations.add(t.location);
+      if (t.tags) t.tags.forEach(tag => tags.add(tag));
       
       const d = new Date(t.date);
       if (!isNaN(d.getTime())) {
@@ -58,7 +74,8 @@ export function Travels() {
       years: Array.from(years).sort().reverse(),
       quarters: Array.from(quarters).sort(),
       months: Array.from(months).sort(),
-      locations: Array.from(locations).sort()
+      locations: Array.from(locations).sort(),
+      tags: Array.from(tags).sort()
     };
   }, [data?.travels, selectedYear, selectedQuarter]);
 
@@ -93,6 +110,13 @@ export function Travels() {
     );
   };
 
+  // Handle tag toggle
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
   // Locations to display in filter (filtered by search)
   const displayLocations = useMemo(() => {
     return filterOptions.locations.filter(loc => 
@@ -105,9 +129,11 @@ export function Travels() {
     if (!data?.travels) return [];
     
     return data.travels.filter(t => {
-      // Title search (fuzzy)
+      // Title/Tag search (fuzzy)
       const matchesSearch = searchQuery 
-        ? t.title?.toLowerCase().includes(searchQuery.toLowerCase()) || t.location?.toLowerCase().includes(searchQuery.toLowerCase())
+        ? t.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+          t.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
         : true;
 
       // Date filtering
@@ -139,17 +165,25 @@ export function Travels() {
         ? selectedLocations.includes(t.location)
         : true;
 
-      return matchesSearch && matchesYear && matchesQuarter && matchesMonth && matchesLocation;
+      // Tags filtering
+      const matchesTags = selectedTags.length > 0
+        ? selectedTags.every(tag => t.tags?.includes(tag))
+        : true;
+
+      // Bookmarked filtering
+      const matchesBookmarked = showBookmarkedOnly ? t.bookmarked === true : true;
+
+      return matchesSearch && matchesYear && matchesQuarter && matchesMonth && matchesLocation && matchesTags && matchesBookmarked;
     }).sort((a, b) => {
       const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
       return sortOrder === 'desc' ? diff : -diff;
     });
-  }, [data?.travels, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, sortOrder]);
+  }, [data?.travels, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly, sortOrder]);
 
   // Reset page when filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations]);
+  }, [searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
 
   const totalPages = Math.ceil(filteredTravels.length / ITEMS_PER_PAGE);
 
@@ -237,6 +271,18 @@ export function Travels() {
               title="时间轴视图"
             >
               <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('story')}
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                viewMode === 'story' 
+                  ? "bg-white dark:bg-white/10 text-indigo-500 dark:text-indigo-400 shadow-sm" 
+                  : "text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              )}
+              title="分屏叙事视图"
+            >
+              <BookOpen className="w-4 h-4" />
             </button>
           </div>
 
@@ -410,8 +456,70 @@ export function Travels() {
                 </div>
               )}
 
+              {/* Tags Filter */}
+              {filterOptions.tags && filterOptions.tags.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <Tag className="w-3 h-3" />
+                      按标签 (多选)
+                    </div>
+                    {/* Tag Search Input */}
+                    <div className="relative">
+                      <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text"
+                        placeholder="搜索标签..."
+                        value={tagSearch}
+                        onChange={(e) => setTagSearch(e.target.value)}
+                        className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full py-1 pl-7 pr-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 w-32 md:w-48 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2 pb-1">
+                    {filterOptions.tags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => {
+                      const isSelected = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-md text-xs font-medium transition-all border",
+                            isSelected 
+                              ? "bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/50" 
+                              : "bg-white/5 text-slate-300 border-transparent hover:bg-white/10"
+                          )}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Bookmark Toggle */}
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <Star className="w-3 h-3" />
+                  只显示收藏记录
+                </div>
+                <button
+                  onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
+                  className={cn(
+                    "w-10 h-5 rounded-full relative transition-colors border",
+                    showBookmarkedOnly ? "bg-yellow-500 border-yellow-400" : "bg-white/10 border-transparent"
+                  )}
+                >
+                  <div className={cn(
+                    "w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm",
+                    showBookmarkedOnly ? "left-5" : "left-1"
+                  )} />
+                </button>
+              </div>
+
               {/* Reset All Filters */}
-              {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0) && (
+              {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
                 <div className="pt-3 border-t border-white/5 flex justify-end">
                   <button
                     onClick={() => {
@@ -419,7 +527,10 @@ export function Travels() {
                       setSelectedQuarter(null);
                       setSelectedMonth(null);
                       setSelectedLocations([]);
+                      setSelectedTags([]);
+                      setShowBookmarkedOnly(false);
                       setLocationSearch('');
+                      setTagSearch('');
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1"
                   >
@@ -454,7 +565,7 @@ export function Travels() {
         </div>
       ) : (
         <div className="space-y-6">
-          {viewMode === 'timeline' ? (
+          {viewMode === 'timeline' && (
             <div className="relative py-8">
               {/* Desktop Quick Nav Scrubber */}
               <div className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-col items-center gap-3 bg-white/50 dark:bg-white/5 backdrop-blur-md py-4 px-2 rounded-full border border-slate-200 dark:border-white/10 shadow-lg">
@@ -549,6 +660,17 @@ export function Travels() {
                                 <MapPin className="w-3 h-3" />
                                 {travel.location}
                               </div>
+                              {travel.bookmarked && (
+                                <div className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400 font-medium tracking-wide bg-yellow-50 dark:bg-yellow-500/10 px-2 py-1 rounded-lg border border-yellow-100 dark:border-yellow-500/20">
+                                  <Star className="w-3 h-3" /> 收藏
+                                </div>
+                              )}
+                              {travel.tags && travel.tags.length > 0 && travel.tags.map(tag => (
+                                <div key={tag} className="flex items-center gap-1 text-[10px] text-fuchsia-600 dark:text-fuchsia-400 font-medium bg-fuchsia-50 dark:bg-fuchsia-500/10 px-1.5 py-0.5 rounded-md border border-fuchsia-100 dark:border-fuchsia-500/20">
+                                  <Tag className="w-2.5 h-2.5" />
+                                  {tag}
+                                </div>
+                              ))}
                             </div>
                           </div>
                           
@@ -559,7 +681,9 @@ export function Travels() {
                 })}
               </div>
             </div>
-          ) : (
+          )}
+
+          {viewMode === 'grid' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {paginatedTravels.map((travel, i) => {
                 const coverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
@@ -601,23 +725,106 @@ export function Travels() {
                     </div>
                   )}
                   <div className="flex-1 mt-1">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5 line-clamp-1" title={travel.title || travel.location}>{travel.title || travel.location}</h3>
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white line-clamp-1" title={travel.title || travel.location}>{travel.title || travel.location}</h3>
+                      {travel.bookmarked && <Star className="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5 fill-yellow-500" />}
+                    </div>
                     {travel.description && (
                       <p className="text-xs text-slate-400 leading-relaxed line-clamp-2" title={travel.description}>
                         {travel.description}
                       </p>
                     )}
                   </div>
-                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-bold bg-indigo-500/10 px-1.5 py-1 rounded-md max-w-[200px]" title={travel.location}>
+                  <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-2">
+                    <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-bold w-fit bg-indigo-500/10 px-1.5 py-1 rounded-md max-w-full" title={travel.location}>
                       <MapPin className="w-3 h-3 flex-shrink-0" />
                       <span className="truncate">{travel.location}</span>
                     </div>
+                    {travel.tags && travel.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {travel.tags.map(tag => (
+                          <span key={tag} className="text-[9px] text-fuchsia-400 bg-fuchsia-500/10 border border-fuchsia-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                            <Tag className="w-2.5 h-2.5" />
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               );
             })}
             </div>
+          )}
+
+          {viewMode === 'story' && (
+             <div className="space-y-16 md:space-y-0 py-8 md:py-16">
+                {paginatedTravels.map((travel, index) => {
+                   const coverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
+                   return (
+                      <div key={`story-${travel.id}`} className="flex flex-col md:flex-row gap-8 md:gap-16 items-start relative min-h-[60vh] border-b border-slate-200 dark:border-white/5 pb-16 md:pb-32 md:py-24 last:border-0 last:pb-0 pt-0 first:pt-0">
+                         {/* Left: Sticky Text */}
+                         <div className="w-full md:w-5/12 md:sticky md:top-[25vh] flex flex-col gap-6 z-10 transition-all duration-500 pt-4 md:pt-0">
+                            <div className="font-mono text-7xl md:text-[8rem] leading-[0.8] font-black text-slate-200 dark:text-white/[0.03] -mb-8 md:-mb-14 pointer-events-none select-none tracking-tighter">
+                              {String((currentPage - 1) * ITEMS_PER_PAGE + index + 1).padStart(2, '0')}
+                            </div>
+                            <div className="relative">
+                              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0a0a0a] dark:text-white tracking-tight leading-tight">
+                                 {travel.title || travel.location}
+                              </h2>
+                              <div className="flex flex-wrap items-center gap-3 mt-5 text-sm font-medium">
+                                 <span className="font-mono bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-500/20">{travel.date}</span>
+                                 <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10">
+                                    <MapPin className="w-4 h-4 text-slate-500" /> {travel.location}
+                                 </span>
+                              </div>
+                            </div>
+                            {travel.description && (
+                              <p className="text-slate-600 dark:text-slate-400 leading-relaxed md:leading-[1.8] text-base md:text-lg whitespace-pre-line mt-2">
+                                {travel.description}
+                              </p>
+                            )}
+                         </div>
+
+                         {/* Right: Images */}
+                         <div className="w-full md:w-7/12">
+                             <div 
+                                className="rounded-[2rem] border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.02] p-2 md:p-3 relative shadow-xl dark:shadow-2xl group cursor-pointer hover:border-indigo-500/30 transition-colors duration-500"
+                                onClick={() => openLightbox(travel)}
+                             >
+                               {/* Glass Badge Apple style */}
+                               <div className="absolute top-6 right-6 z-20 glass px-4 py-2 rounded-xl backdrop-blur-xl bg-white/70 dark:bg-[#0a0a0a]/60 border border-slate-200 dark:border-white/10 shadow-xl flex items-center gap-2 group-hover:scale-105 transition-transform duration-300">
+                                  <MapPin className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+                                  <span className="text-xs font-bold text-slate-800 dark:text-white/90 font-mono">
+                                     {new Date(travel.date).getFullYear() || travel.location}
+                                  </span>
+                               </div>
+                               <div className="rounded-[1.5rem] overflow-hidden relative bg-slate-100 dark:bg-[#0a0a0a]">
+                                 {coverImage ? (
+                                    <img 
+                                       src={coverImage} 
+                                       alt={travel.location} 
+                                       className="w-full h-auto min-h-[300px] md:min-h-[500px] object-cover transition-transform duration-1000 group-hover:scale-[1.02]"
+                                       loading="lazy"
+                                    />
+                                 ) : (
+                                    <div className="w-full h-[300px] md:h-[500px] flex items-center justify-center text-slate-400 dark:text-white/30">
+                                       暂无图片
+                                    </div>
+                                 )}
+                                 {travel.imageUrls && travel.imageUrls.length > 1 && (
+                                   <div className="absolute bottom-6 left-6 z-20 glass px-4 py-2 rounded-full text-xs font-semibold text-slate-900 dark:text-white backdrop-blur-md bg-white/80 dark:bg-[#0a0a0a]/70 border border-slate-200 dark:border-white/10 shadow-lg flex items-center gap-2">
+                                     <Images className="w-3.5 h-3.5" />
+                                     查看图集 ({travel.imageUrls.length})
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
+                         </div>
+                      </div>
+                   )
+                })}
+             </div>
           )}
 
           {totalPages > 1 && (

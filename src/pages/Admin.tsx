@@ -1,10 +1,47 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
 import { ConfirmModal } from '../components/ConfirmModal';
+
+// --- Message Modal Component ---
+export function MessageModal({ isOpen, isError, message, onClose }: { isOpen: boolean; isError: boolean; message: string; onClose: () => void }) {
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: -20 }}
+            className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-white/10"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center space-y-4">
+              {isError ? (
+                <XCircle className="w-16 h-16 text-red-500" />
+              ) : (
+                <CheckCircle className="w-16 h-16 text-green-500" />
+              )}
+              <h3 className="text-xl font-bold dark:text-white pb-2">{isError ? '操作失败' : '操作成功'}</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{message}</p>
+              <button 
+                onClick={onClose}
+                className="mt-4 bg-indigo-500 text-white px-8 py-2 rounded-full font-medium hover:bg-indigo-600 transition-colors"
+              >
+                确定
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+}
 
 export function Admin() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
@@ -270,13 +307,20 @@ function HomeEditor({ token }: { token: string }) {
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      if (uploadRes.ok) {
-        const uploadData = await uploadRes.json();
-        avatarUrl = uploadData.url;
+      if (!uploadRes.ok) {
+        setLoading(false);
+        throw new Error('头像上传失败，可能是登录已过期');
       }
+      const uploadData = await uploadRes.json();
+      avatarUrl = uploadData.url;
     }
 
-    await updateHomeConfig({ ...form, avatarUrl });
+    const success = await updateHomeConfig({ ...form, avatarUrl });
+    if (!success) {
+      setLoading(false);
+      throw new Error('配置更新失败，请重试或刷新登录');
+    }
+    
     setLoading(false);
     setAvatarFile(null);
   };
@@ -291,12 +335,11 @@ function HomeEditor({ token }: { token: string }) {
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      if (uploadRes.ok) {
-        const uploadData = await uploadRes.json();
-        updateBlock(index, { url: uploadData.url });
-      } else {
-        alert('上传失败');
+      if (!uploadRes.ok) {
+        throw new Error('上传失败，可能是登录已过期');
       }
+      const uploadData = await uploadRes.json();
+      updateBlock(index, { url: uploadData.url });
     } catch {
       alert('上传发生错误');
     }
@@ -497,10 +540,29 @@ function TravelAdder({ token }: { token: string }) {
   const { data, addTravel, updateTravel, deleteTravel } = useData();
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: '', location: '', date: '', description: '', coverImageIndex: 0 });
+  const [form, setForm] = useState({ title: '', location: '', date: '', description: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
   const [files, setFiles] = useState<File[]>([]);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  
+  // Message Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalIsError, setModalIsError] = useState(false);
+  const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
+
+  const showMessage = (msg: string, isErr: boolean = false, cb?: () => void) => {
+    setModalMessage(msg);
+    setModalIsError(isErr);
+    if (cb) setModalCallback(() => cb);
+    else setModalCallback(null);
+    setModalOpen(true);
+  };
+  
+  // Batch edit state
+  const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
+  const [batchTagsStr, setBatchTagsStr] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -591,6 +653,8 @@ function TravelAdder({ token }: { token: string }) {
       date: travel.date || '',
       description: travel.description || '',
       coverImageIndex: travel.coverImageIndex || 0,
+      tagsStr: travel.tags ? travel.tags.join(', ') : '',
+      bookmarked: travel.bookmarked || false,
     });
     setFiles([]);
     setExistingImageUrls(travel.imageUrls || (travel.imageUrl ? [travel.imageUrl] : []));
@@ -598,7 +662,7 @@ function TravelAdder({ token }: { token: string }) {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setForm({ title: '', location: '', date: '', description: '', coverImageIndex: 0 });
+    setForm({ title: '', location: '', date: '', description: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
     setFiles([]);
     setExistingImageUrls([]);
   };
@@ -631,9 +695,17 @@ function TravelAdder({ token }: { token: string }) {
 
   const confirmDeleteTravel = async () => {
     if (!deleteConfirm) return;
-    await deleteTravel(deleteConfirm);
-    if (editingId === deleteConfirm) {
-      cancelEdit();
+    try {
+      const success = await deleteTravel(deleteConfirm);
+      if (!success) {
+        throw new Error('删除失败，请刷新登录');
+      }
+      if (editingId === deleteConfirm) {
+        cancelEdit();
+      }
+      showMessage('旅行记录已删除', false, () => window.location.reload());
+    } catch (e: any) {
+      showMessage(e.message || '删除失败', true);
     }
     setDeleteConfirm(null);
   };
@@ -652,28 +724,38 @@ function TravelAdder({ token }: { token: string }) {
           headers: { 'Authorization': `Bearer ${token}` },
           body: formData
         });
+        if (!uploadRes.ok) throw new Error('上传失败，可能是登录已过期');
         const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
         newUrls.push(uploadData.url);
       }
 
       const finalUrls = [...existingImageUrls, ...newUrls];
       
       const payload = {
-        ...form,
+        title: form.title,
+        location: form.location,
+        date: form.date,
+        description: form.description,
+        coverImageIndex: form.coverImageIndex,
+        tags: form.tagsStr.split(',').map(s => s.trim()).filter(Boolean),
+        bookmarked: form.bookmarked,
         imageUrls: finalUrls,
         imageUrl: finalUrls[form.coverImageIndex] || finalUrls[0] || undefined // for backward compat
       };
 
       if (editingId && updateTravel) {
-        await updateTravel(editingId, payload);
+        const success = await updateTravel(editingId, payload);
+        if (!success) throw new Error('更新失败，请刷新登录');
+        showMessage('旅行记录更新成功', false, () => window.location.reload());
       } else {
-        await addTravel(payload);
+        const success = await addTravel(payload);
+        if (!success) throw new Error('添加失败，请刷新登录');
+        showMessage('旅行记录添加成功', false, () => window.location.reload());
       }
 
       cancelEdit();
     } catch (e: any) {
-      alert(e.message);
+      showMessage(e.message || '失败', true);
     } finally {
       setLoading(false);
     }
@@ -699,15 +781,29 @@ function TravelAdder({ token }: { token: string }) {
             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
           />
         </div>
-        <input
-          required
-          type="date"
-          placeholder="日期"
-          value={form.date}
-          onChange={(e) => setForm({ ...form, date: e.target.value })}
-          className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm color-scheme-dark"
-          style={{ colorScheme: 'dark' }}
-        />
+        <div className="flex gap-2">
+          <input
+            required
+            type="date"
+            placeholder="日期"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            className="flex-1 w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm color-scheme-dark"
+            style={{ colorScheme: 'dark' }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const today = new Date();
+              // Adjust for local timezone
+              const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+              setForm({ ...form, date: localDate });
+            }}
+            className="px-4 py-3 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-medium hover:bg-indigo-500/30 transition-colors whitespace-nowrap"
+          >
+            今天
+          </button>
+        </div>
         <textarea
           placeholder="描述（选填）"
           value={form.description}
@@ -715,6 +811,24 @@ function TravelAdder({ token }: { token: string }) {
           rows={2}
           className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm resize-none"
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <input
+            placeholder="标签 (逗号分隔，如：海岛, 潜水)"
+            value={form.tagsStr}
+            onChange={(e) => setForm({ ...form, tagsStr: e.target.value })}
+            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+          />
+          <label className="flex items-center gap-2 cursor-pointer bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm w-fit">
+            <input 
+              type="checkbox" 
+              checked={form.bookmarked} 
+              onChange={(e) => setForm({ ...form, bookmarked: e.target.checked })}
+              className="rounded w-4 h-4 bg-black/20 border-white/20 text-indigo-500 focus:ring-indigo-500/50 transition-colors"
+            />
+            <span className="text-white/70">设为收藏记录</span>
+          </label>
+        </div>
         
         <div className="space-y-2">
           <label className="text-xs text-white/50 px-1">照片库 (支持多张，可选且可不传)</label>
@@ -788,48 +902,94 @@ function TravelAdder({ token }: { token: string }) {
       
       {data?.travels && data.travels.length > 0 && (
         <div className="space-y-4 pt-6 border-t border-white/10">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white/70">已有记录 ({filteredTravels.length}/{data.travels.length})</h3>
-            
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text"
-                  placeholder="搜索标题或地点..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-black/20 border border-white/10 rounded-full py-1.5 pl-8 pr-3 text-xs w-32 md:w-40 focus:outline-none focus:border-indigo-500/50"
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-white/70">已有记录 ({filteredTravels.length}/{data.travels.length})</h3>
               
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
-                  showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
-                    ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-                    : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
-                )}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                筛查
-                {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
-                  <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] ml-0.5">
-                    {(selectedYear ? 1 : 0) + (selectedMonth ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
-                  </span>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text"
+                    placeholder="搜索标题或地点..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-black/20 border border-white/10 rounded-full py-1.5 pl-8 pr-3 text-xs w-32 md:w-40 focus:outline-none focus:border-indigo-500/50"
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
+                      ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                      : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
+                  )}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  筛查
+                  {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
+                    <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] ml-0.5">
+                      {(selectedYear ? 1 : 0) + (selectedMonth ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {selectedForBatch.length > 0 && (
+              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all">
+                <span className="text-sm font-medium text-indigo-300">已选择 {selectedForBatch.length} 项</span>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <input
+                    placeholder="批量打标签 (逗号分隔)"
+                    value={batchTagsStr}
+                    onChange={(e) => setBatchTagsStr(e.target.value)}
+                    className="flex-1 min-w-[150px] bg-black/20 border border-indigo-500/30 rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-400 text-indigo-100"
+                  />
+                  <button
+                    type="button"
+                    disabled={batchLoading || !updateTravel}
+                    onClick={async () => {
+                      if (!updateTravel) return;
+                      setBatchLoading(true);
+                      const tags = batchTagsStr.split(',').map(s => s.trim()).filter(Boolean);
+                      for (const id of selectedForBatch) {
+                        const travel = data.travels.find(t => t.id === id);
+                        if (travel) {
+                          const newTags = Array.from(new Set([...(travel.tags || []), ...tags]));
+                          await updateTravel(id, { tags: newTags });
+                        }
+                      }
+                      setBatchTagsStr('');
+                      setSelectedForBatch([]);
+                      setBatchLoading(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                  >
+                    {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
+                    追加标签
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedForBatch([]); setBatchTagsStr(''); }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 transition-colors whitespace-nowrap"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <AnimatePresence>
@@ -949,10 +1109,32 @@ function TravelAdder({ token }: { token: string }) {
               <p className="text-xs text-white/30 text-center py-4">无符合条件的记录</p>
             ) : (
               filteredTravels.map(travel => (
-                <div key={travel.id} className={cn("flex items-center justify-between border p-3 rounded-xl cursor-pointer transition-colors", editingId === travel.id ? "bg-indigo-500/20 border-indigo-500/50" : "bg-black/20 border-white/5 hover:bg-white/5")} onClick={() => editingId === travel.id ? cancelEdit() : startEdit(travel)}>
-                  <div className="flex flex-col truncate pr-2">
-                    <span className="text-sm text-white/90 truncate">{travel.title || travel.location} <span className="text-xs text-white/50 border border-white/10 px-1 rounded ml-1 shrink-0">{travel.location}</span></span>
-                    <span className="text-xs text-white/50">{travel.date}</span>
+                <div key={travel.id} className={cn("flex items-center gap-3 border p-3 rounded-xl cursor-pointer transition-colors", editingId === travel.id ? "bg-indigo-500/20 border-indigo-500/50" : "bg-black/20 border-white/5 hover:bg-white/5")} onClick={() => editingId === travel.id ? cancelEdit() : startEdit(travel)}>
+                  <div className="flex items-center justify-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <input 
+                      type="checkbox"
+                      checked={selectedForBatch.includes(travel.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedForBatch(p => [...p, travel.id]);
+                        else setSelectedForBatch(p => p.filter(id => id !== travel.id));
+                      }}
+                      className="rounded w-4 h-4 bg-black/20 border-white/20 text-indigo-500 focus:ring-indigo-500/50 transition-colors cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex flex-col truncate pr-2 flex-1">
+                    <span className="text-sm text-white/90 truncate flex items-center gap-2">
+                       {travel.title || travel.location} 
+                       {travel.bookmarked && <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-1 rounded border border-yellow-500/30">收藏</span>}
+                       <span className="text-xs text-white/50 border border-white/10 px-1 rounded shrink-0">{travel.location}</span>
+                    </span>
+                    <span className="text-xs text-white/50 flex items-center gap-2 mt-0.5">
+                      {travel.date}
+                      {travel.tags && travel.tags.length > 0 && (
+                        <span className="text-indigo-300 truncate">
+                          · {travel.tags.join(', ')}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirm(travel.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
                     <Trash2 className="w-4 h-4" />
@@ -971,6 +1153,16 @@ function TravelAdder({ token }: { token: string }) {
         onConfirm={confirmDeleteTravel}
         onCancel={() => setDeleteConfirm(null)}
       />
+      
+      <MessageModal 
+        isOpen={modalOpen} 
+        isError={modalIsError} 
+        message={modalMessage} 
+        onClose={() => {
+          setModalOpen(false);
+          if (modalCallback) modalCallback();
+        }} 
+      />
     </section>
   );
 }
@@ -981,17 +1173,43 @@ function BookmarkAdder({ token }: { token: string }) {
   const [form, setForm] = useState({ title: '', url: '', description: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  // Message Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalIsError, setModalIsError] = useState(false);
+  const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
+
+  const showMessage = (msg: string, isErr: boolean = false, cb?: () => void) => {
+    setModalMessage(msg);
+    setModalIsError(isErr);
+    if (cb) setModalCallback(() => cb);
+    else setModalCallback(null);
+    setModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await addBookmark(form);
-    setForm({ title: '', url: '', description: '' });
+    try {
+      const success = await addBookmark(form);
+      if (!success) throw new Error('添加失败，请刷新登录');
+      setForm({ title: '', url: '', description: '' });
+      showMessage('书签添加成功', false, () => window.location.reload());
+    } catch (err: any) {
+      showMessage(err.message || '添加失败', true);
+    }
     setLoading(false);
   };
 
   const confirmDeleteBookmark = async () => {
     if (!deleteConfirm) return;
-    await deleteBookmark(deleteConfirm);
+    try {
+      const success = await deleteBookmark(deleteConfirm);
+      if (!success) throw new Error('删除失败，请刷新登录');
+      showMessage('书签已删除', false, () => window.location.reload());
+    } catch (err: any) {
+      showMessage(err.message || '删除失败', true);
+    }
     setDeleteConfirm(null);
   };
 
@@ -1054,6 +1272,16 @@ function BookmarkAdder({ token }: { token: string }) {
         message="确定要删除这个书签吗？"
         onConfirm={confirmDeleteBookmark}
         onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <MessageModal 
+        isOpen={modalOpen} 
+        isError={modalIsError} 
+        message={modalMessage} 
+        onClose={() => {
+          setModalOpen(false);
+          if (modalCallback) modalCallback();
+        }} 
       />
     </section>
   );

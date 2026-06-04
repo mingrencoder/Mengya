@@ -23,6 +23,8 @@ export interface TravelData {
   imageUrls?: string[];
   coverImageIndex?: number;
   description?: string;
+  tags?: string[];
+  bookmarked?: boolean;
 }
 
 export interface BookmarkData {
