@@ -183,22 +183,27 @@ app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    // Find old images
-    const oldUrls = oldTravel.imageUrls || (oldTravel.imageUrl ? [oldTravel.imageUrl] : []);
-    
     // Find new images
     const newTravel = req.body;
-    const newUrls = newTravel.imageUrls || (newTravel.imageUrl ? [newTravel.imageUrl] : []);
     
-    // Delete missing files
-    oldUrls.forEach(url => {
-      if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
-        const filePath = path.join(uploadDirBase, url.replace('/uploads/', ''));
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+    if (newTravel.imageUrls !== undefined || newTravel.imageUrl !== undefined) {
+      const oldUrls = oldTravel.imageUrls || (oldTravel.imageUrl ? [oldTravel.imageUrl] : []);
+      const newUrls = newTravel.imageUrls || (newTravel.imageUrl ? [newTravel.imageUrl] : []);
+      
+      // Delete missing files
+      oldUrls.forEach(url => {
+        if (url && !newUrls.includes(url) && url.startsWith('/uploads/')) {
+          const filePath = path.join(uploadDirBase, url.replace('/uploads/', ''));
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {
+              console.error('Failed to unlink file', filePath, e);
+            }
+          }
         }
-      }
-    });
+      });
+    }
 
     const updated = services.travels.update(req.params.id, newTravel);
     res.json(updated);

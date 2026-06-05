@@ -32,12 +32,38 @@ export function Travels() {
   const [coverFlowIndex, setCoverFlowIndex] = useState(0);
   
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 12;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [inputItemsPerPage, setInputItemsPerPage] = useState('20');
+
+  React.useEffect(() => {
+    setInputItemsPerPage(String(itemsPerPage));
+  }, [itemsPerPage]);
+
+  const handleItemsPerPageBlur = () => {
+    let val = parseInt(inputItemsPerPage, 10);
+    if (isNaN(val) || val < 10) val = 10;
+    if (val > 100) val = 100;
+    if (val !== itemsPerPage) {
+      setItemsPerPage(val);
+      setCurrentPage(1);
+    }
+    setInputItemsPerPage(String(val));
+  };
+
+  const handleItemsPerPageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputItemsPerPage(e.target.value.replace(/\D/g, ''));
+  };
+
+  const handleItemsPerPageKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+    }
+  };
 
   // Reset cover flow index when pagination or filters change
   React.useEffect(() => {
     setCoverFlowIndex(0);
-  }, [currentPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
+  }, [currentPage, itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
 
   // Extract filter options
   const filterOptions = useMemo(() => {
@@ -184,14 +210,14 @@ export function Travels() {
   // Reset page when filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
+  }, [itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
 
-  const totalPages = Math.ceil(filteredTravels.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredTravels.length / itemsPerPage);
 
   const paginatedTravels = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredTravels.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredTravels, currentPage]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredTravels.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredTravels, currentPage, itemsPerPage]);
 
   const touchStartX = React.useRef<number | null>(null);
   const touchEndX = React.useRef<number | null>(null);
@@ -920,7 +946,7 @@ export function Travels() {
                          {/* Left: Sticky Text */}
                          <div className="w-full md:w-5/12 md:sticky md:top-[25vh] flex flex-col gap-6 z-10 transition-all duration-500 pt-4 md:pt-0">
                             <div className="font-mono text-7xl md:text-[8rem] leading-[0.8] font-black text-slate-200 dark:text-white/[0.03] -mb-8 md:-mb-14 pointer-events-none select-none tracking-tighter">
-                              {String((currentPage - 1) * ITEMS_PER_PAGE + index + 1).padStart(2, '0')}
+                              {String((currentPage - 1) * itemsPerPage + index + 1).padStart(2, '0')}
                             </div>
                             <div className="relative">
                               <h2 className="text-3xl md:text-5xl font-extrabold text-[#0a0a0a] dark:text-white tracking-tight leading-tight">
@@ -983,48 +1009,80 @@ export function Travels() {
           )}
 
           {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-8">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                aria-label="上一页"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              
-              <div className="flex items-center gap-1 mx-2">
-                {Array.from({ length: totalPages }).map((_, i) => {
-                   // Show subset of pages for compact view if many pages
-                   if (totalPages > 7 && i !== 0 && i !== totalPages - 1 && Math.abs(i + 1 - currentPage) > 1) {
-                     if (i + 1 === currentPage - 2 || i + 1 === currentPage + 2) return <span key={i} className="text-slate-500">...</span>;
-                     return null;
-                   }
-                   return (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={cn(
-                        "w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors",
-                        currentPage === i + 1
-                          ? "bg-indigo-500 text-white"
-                          : "text-slate-400 hover:text-white hover:bg-white/10"
-                      )}
-                    >
-                      {i + 1}
-                    </button>
-                   );
-                })}
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-8">
+              <div className="flex justify-center items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="上一页"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                <div className="flex items-center gap-1 mx-2">
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                     // Show subset of pages for compact view if many pages
+                     if (totalPages > 7 && i !== 0 && i !== totalPages - 1 && Math.abs(i + 1 - currentPage) > 1) {
+                       if (i + 1 === currentPage - 2 || i + 1 === currentPage + 2) return <span key={i} className="text-slate-500">...</span>;
+                       return null;
+                     }
+                     return (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i + 1)}
+                        className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors",
+                          currentPage === i + 1
+                            ? "bg-indigo-500 text-white"
+                            : "text-slate-400 hover:text-white hover:bg-white/10"
+                        )}
+                      >
+                        {i + 1}
+                      </button>
+                     );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="下一页"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
 
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-full glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                aria-label="下一页"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-white/5 border border-slate-200 dark:border-white/10 rounded-full px-3 py-1.5">
+                <span>每页显示</span>
+                <input
+                  type="text"
+                  value={inputItemsPerPage}
+                  onChange={handleItemsPerPageChange}
+                  onBlur={handleItemsPerPageBlur}
+                  onKeyDown={handleItemsPerPageKeyDown}
+                  className="bg-transparent text-slate-900 dark:text-white focus:outline-none focus:ring-0 cursor-text font-medium w-[4ch] text-center p-0 border-b border-transparent focus:border-indigo-500 transition-colors"
+                />
+                <span>条</span>
+              </div>
+            </div>
+          )}
+          
+          {totalPages <= 1 && filteredTravels.length > 0 && (
+            <div className="flex justify-center items-center mt-8">
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-white/5 border border-slate-200 dark:border-white/10 rounded-full px-3 py-1.5">
+                <span>每页显示</span>
+                <input
+                  type="text"
+                  value={inputItemsPerPage}
+                  onChange={handleItemsPerPageChange}
+                  onBlur={handleItemsPerPageBlur}
+                  onKeyDown={handleItemsPerPageKeyDown}
+                  className="bg-transparent text-slate-900 dark:text-white focus:outline-none focus:ring-0 cursor-text font-medium w-[4ch] text-center p-0 border-b border-transparent focus:border-indigo-500 transition-colors"
+                />
+                <span>条</span>
+              </div>
             </div>
           )}
         </div>
