@@ -51,6 +51,14 @@ export function Admin() {
     (localStorage.getItem('admin_active_tab') as any) || 'home'
   );
 
+  const { data, refresh } = useData();
+
+  useEffect(() => {
+    if (token && data && data.isTravelAuthorized === false) {
+      handleLogout();
+    }
+  }, [token, data]);
+
   useEffect(() => {
     localStorage.setItem('admin_active_tab', activeTab);
   }, [activeTab]);
@@ -329,6 +337,7 @@ function DataExportImport({ token }: { token: string }) {
 function PasswordEditor({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [travelPassword, setTravelPassword] = useState('');
   const [message, setMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -337,15 +346,25 @@ function PasswordEditor({ token }: { token: string }) {
     setMessage('');
     
     try {
+      const bodyPayload: any = {};
+      if (newPassword) bodyPayload.newPassword = newPassword;
+      if (travelPassword) bodyPayload.travelPassword = travelPassword;
+
+      if (Object.keys(bodyPayload).length === 0) {
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch('/api/auth/password', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ newPassword })
+        body: JSON.stringify(bodyPayload)
       });
       
       if (res.ok) {
         setMessage('密码修改成功');
         setNewPassword('');
+        setTravelPassword('');
       } else {
         setMessage('密码修改失败');
       }
@@ -358,26 +377,35 @@ function PasswordEditor({ token }: { token: string }) {
 
   return (
     <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 flex-1 h-fit">
-      <h2 className="text-xl font-medium">修改管理员密码</h2>
+      <h2 className="text-xl font-medium">修改密码</h2>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-xs text-white/50 px-1">新密码</label>
+          <label className="text-xs text-white/50 px-1">新管理员后台密码（留空则不修改）</label>
           <input
             type="password"
-            required
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="请输入新密码"
+            placeholder="请输入新后台密码"
+            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 flex-1 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-white/50 px-1">新旅行日记密码（留空则不修改，默认: 123321）</label>
+          <input
+            type="password"
+            value={travelPassword}
+            onChange={(e) => setTravelPassword(e.target.value)}
+            placeholder="请输入新旅行日记密码"
             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 flex-1 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
           />
         </div>
         {message && <p className={cn("text-xs", message.includes('成功') ? "text-emerald-400" : "text-red-400")}>{message}</p>}
         <button
           type="submit"
-          disabled={loading || !newPassword}
+          disabled={loading || (!newPassword && !travelPassword)}
           className="bg-white/10 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '修改密码'}
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '保存修改'}
         </button>
       </form>
     </section>

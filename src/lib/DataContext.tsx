@@ -44,7 +44,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/data');
+      const token = localStorage.getItem('admin_token') || localStorage.getItem('travel_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/data', { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -62,7 +69,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getHeaders = () => {
-    const token = localStorage.getItem('admin_token');
+    const token = localStorage.getItem('admin_token') || localStorage.getItem('travel_token');
     return {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})

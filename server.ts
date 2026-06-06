@@ -3,7 +3,7 @@ import path from 'path';
 import cors from 'cors';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
-import { services, hashPassword } from './server/services/StorageService';
+import { services, hashPassword, CoreStorage } from './server/services/StorageService';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -49,8 +49,14 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
   if (!token) return res.sendStatus(401);
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user: any) => {
     if (err) return res.sendStatus(403);
+    
+    // Check if the user is an admin
+    if (user.role !== 'admin' && user.admin !== true) {
+      return res.sendStatus(403);
+    }
+    
     (req as any).user = user;
     next();
   });
@@ -61,9 +67,25 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 // --- Public APIs ---
 app.get('/api/data', (req, res) => {
   try {
+    const authHeader = req.headers['authorization'];
+    let token = authHeader && authHeader.split(' ')[1];
+    
+    let isTravelAuthorized = false;
+    if (token) {
+      try {
+        const decoded: any = jwt.verify(token, JWT_SECRET);
+        if (decoded.role === 'admin' || decoded.role === 'travel' || decoded.admin) {
+          isTravelAuthorized = true;
+        }
+      } catch (err) {
+        // invalid token
+      }
+    }
+
     const data = {
       home: services.home.read(),
-      travels: services.travels.readAll(),
+      travels: isTravelAuthorized ? services.travels.readAll() : [],
+      isTravelAuthorized,
       bookmarks: services.bookmarks.readAll()
     };
     res.json(data);
@@ -86,13 +108,35 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // --- Protected APIs ---
+app.post('/api/auth/travel-login', (req, res) => {
+  const { password } = req.body;
+  const settings = services.settings.read();
+  
+  // if not set yet, fallback to 123321
+  const expectedHash = settings.travelPasswordHash || hashPassword('123321');
+  const match = expectedHash === hashPassword(password);
+
+  if (match) {
+    const token = jwt.sign({ role: 'travel' }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
 // Update Password
 app.put('/api/auth/password', authenticateToken, (req, res) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword) return res.status(400).json({ error: 'Password required' });
+    const { newPassword, travelPassword } = req.body;
     const settings = services.settings.read();
-    settings.passwordHash = hashPassword(newPassword);
+    
+    if (newPassword) {
+      settings.passwordHash = hashPassword(newPassword);
+    }
+    if (travelPassword) {
+      settings.travelPasswordHash = hashPassword(travelPassword);
+    }
+    
     services.settings.write(settings);
     res.json({ success: true });
   } catch (error) {
@@ -284,7 +328,26 @@ app.get('/api/data/export', authenticateToken, (req, res) => {
 
     const dataDir = path.resolve(process.cwd(), 'data');
     if (fs.existsSync(dataDir)) {
-      zip.addLocalFolder(dataDir, 'data');
+      const walkAndAddDecrypted = (dir: string, baseZipDir: string) => {
+        fs.readdirSync(dir).forEach(file => {
+          const filepath = path.join(dir, file);
+          if (fs.statSync(filepath).isDirectory()) {
+            walkAndAddDecrypted(filepath, path.join(baseZipDir, file).replace(/\\/g, '/'));
+          } else if (file.endsWith('.json')) {
+            const content = fs.readFileSync(filepath, 'utf-8');
+            try {
+              const decrypted = CoreStorage.decrypt(content);
+              JSON.parse(decrypted); // ensure it's valid JSON
+              zip.addFile(`${baseZipDir}/${file}`, Buffer.from(decrypted, 'utf-8'));
+            } catch (e) {
+              zip.addFile(`${baseZipDir}/${file}`, Buffer.from(content, 'utf-8'));
+            }
+          } else {
+             zip.addLocalFile(filepath, baseZipDir);
+          }
+        });
+      };
+      walkAndAddDecrypted(dataDir, 'data');
     }
 
     const uploadDir = path.resolve(process.cwd(), 'public/uploads');
@@ -314,9 +377,31 @@ app.post('/api/data/import', authenticateToken, upload.single('file'), (req, res
 
     const extractedDataDir = path.join(extractDir, 'data');
     if (fs.existsSync(extractedDataDir)) {
+      const walkAndEncrypt = (dir: string, targetDir: string) => {
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        fs.readdirSync(dir).forEach(file => {
+          const filepath = path.join(dir, file);
+          const targetPath = path.join(targetDir, file);
+          if (fs.statSync(filepath).isDirectory()) {
+            walkAndEncrypt(filepath, targetPath);
+          } else if (file.endsWith('.json')) {
+            const data = fs.readFileSync(filepath, 'utf-8');
+            try {
+              JSON.parse(data);
+              const encrypted = CoreStorage.encrypt(data);
+              fs.writeFileSync(targetPath, encrypted, 'utf-8');
+            } catch (e) {
+              fs.copyFileSync(filepath, targetPath);
+            }
+          } else {
+            fs.copyFileSync(filepath, targetPath);
+          }
+        });
+      };
+      
       const targetDataDir = path.resolve(process.cwd(), 'data');
       if (!fs.existsSync(targetDataDir)) fs.mkdirSync(targetDataDir, { recursive: true });
-      fs.cpSync(extractedDataDir, targetDataDir, { recursive: true });
+      walkAndEncrypt(extractedDataDir, targetDataDir);
     }
 
     const extractedUploadsDir = path.join(extractDir, 'public/uploads');

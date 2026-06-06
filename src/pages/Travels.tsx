@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star } from 'lucide-react';
+import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -11,10 +11,43 @@ import 'swiper/css/effect-coverflow';
 import 'swiper/css/free-mode';
 
 export function Travels() {
-  const { data, loading } = useData();
+  const { data, loading, refresh } = useData();
   const [selectedTravel, setSelectedTravel] = useState<any>(null);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  const isAdmin = !!localStorage.getItem('admin_token');
+  const [travelToken, setTravelToken] = useState(localStorage.getItem('travel_token'));
+  
+  const isLocked = data && data.isTravelAuthorized === false;
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth/travel-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      if (res.ok) {
+        const { token } = await res.json();
+        localStorage.setItem('travel_token', token);
+        setTravelToken(token);
+        refresh();
+      } else {
+        setLoginError('密码错误');
+      }
+    } catch (e) {
+      setLoginError('登录失败');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,6 +305,37 @@ export function Travels() {
   }, [viewMode, paginatedTravels.length]);
 
   if (loading || !data) return <div className="animate-pulse flex h-32 w-full rounded-2xl bg-slate-100 dark:bg-white/5" />;
+
+  if (isLocked) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh]">
+        <div className="glass p-8 rounded-3xl border border-white/10 max-w-sm w-full shadow-2xl flex flex-col items-center">
+           <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
+              <Lock className="w-8 h-8 text-indigo-500" />
+           </div>
+           <h2 className="text-xl font-bold dark:text-white mb-2">访问受限</h2>
+           <p className="text-slate-400 text-sm text-center mb-6">访问旅行日记需要输入密码。</p>
+           <form onSubmit={handleLogin} className="w-full space-y-4">
+              <input 
+                 type="password" 
+                 value={password}
+                 onChange={e => setPassword(e.target.value)}
+                 className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                 placeholder="请输入旅行日记密码"
+              />
+              {loginError && <p className="text-red-500 text-xs px-1">{loginError}</p>}
+              <button 
+                type="submit" 
+                disabled={!password || isLoggingIn} 
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-3 font-medium transition-colors"
+                >
+                解锁
+              </button>
+           </form>
+        </div>
+      </div>
+    );
+  }
 
   const openLightbox = (travel: any) => {
     setSelectedTravel(travel);

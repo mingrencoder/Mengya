@@ -38,6 +38,7 @@ export interface BookmarkData {
 export interface PlatformData {
   home: HomeData;
   travels: TravelData[];
+  isTravelAuthorized?: boolean;
   bookmarks: BookmarkData[];
   settings?: {
     passwordHash: string;
