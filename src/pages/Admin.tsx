@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle, Home, Map, Bookmark, Settings } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle, Home, Map, Bookmark, Settings, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
@@ -44,9 +44,25 @@ export function MessageModal({ isOpen, isError, message, onClose }: { isOpen: bo
 }
 
 export function Admin() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
+  const [token, setToken] = useState<string | null>(() => {
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      try {
+        const base64Url = adminToken.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const payload = JSON.parse(jsonPayload);
+        if (payload.exp * 1000 > Date.now()) return adminToken;
+      } catch (e) {}
+      localStorage.removeItem('admin_token');
+    }
+    return null;
+  });
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'travels' | 'bookmarks' | 'settings'>(
     (localStorage.getItem('admin_active_tab') as any) || 'home'
   );
@@ -101,15 +117,22 @@ export function Admin() {
             <p className="text-sm text-slate-500 dark:text-white/50 mt-1">请输入密码以管理内容</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
+            <div className="relative">
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入管理员密码"
-                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500/50 transition-colors"
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:border-indigo-500/50 transition-colors"
                 autoFocus
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
             {error && <p className="text-xs text-red-400 text-center">{error}</p>}
             <button
@@ -404,6 +427,8 @@ function PasswordEditor({ token }: { token: string }) {
   const [newPassword, setNewPassword] = useState('');
   const [travelPassword, setTravelPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showTravelPassword, setShowTravelPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -446,23 +471,41 @@ function PasswordEditor({ token }: { token: string }) {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
           <label className="text-xs text-white/50 px-1">新管理员后台密码（留空则不修改）</label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="请输入新后台密码"
-            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 flex-1 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
-          />
+          <div className="relative">
+            <input
+              type={showAdminPassword ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="请输入新后台密码"
+              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowAdminPassword(!showAdminPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
+            >
+              {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs text-white/50 px-1">新旅行日记密码（留空则不修改，默认: 123321）</label>
-          <input
-            type="password"
-            value={travelPassword}
-            onChange={(e) => setTravelPassword(e.target.value)}
-            placeholder="请输入新旅行日记密码"
-            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 flex-1 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
-          />
+          <div className="relative">
+            <input
+              type={showTravelPassword ? "text" : "password"}
+              value={travelPassword}
+              onChange={(e) => setTravelPassword(e.target.value)}
+              placeholder="请输入新旅行日记密码"
+              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowTravelPassword(!showTravelPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
+            >
+              {showTravelPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
         {message && <p className={cn("text-xs", message.includes('成功') ? "text-emerald-400" : "text-red-400")}>{message}</p>}
         <button

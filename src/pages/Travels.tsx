@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star, Lock } from 'lucide-react';
+import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -16,8 +16,23 @@ export function Travels() {
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  const isAdmin = !!localStorage.getItem('admin_token');
+  const isAdmin = useMemo(() => {
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      try {
+        const base64Url = adminToken.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const payload = JSON.parse(jsonPayload);
+        if (payload.exp * 1000 > Date.now()) return true;
+      } catch (e) {}
+    }
+    return false;
+  }, []);
   const [travelToken, setTravelToken] = useState(localStorage.getItem('travel_token'));
+  const [showPassword, setShowPassword] = useState(false);
   
   const isLocked = data && data.isTravelAuthorized === false;
   const [password, setPassword] = useState('');
@@ -316,13 +331,22 @@ export function Travels() {
            <h2 className="text-xl font-bold dark:text-white mb-2">访问受限</h2>
            <p className="text-slate-400 text-sm text-center mb-6">访问旅行日记需要输入密码。</p>
            <form onSubmit={handleLogin} className="w-full space-y-4">
-              <input 
-                 type="password" 
-                 value={password}
-                 onChange={e => setPassword(e.target.value)}
-                 className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                 placeholder="请输入旅行日记密码"
-              />
+              <div className="relative">
+                <input 
+                   type={showPassword ? "text" : "password"} 
+                   value={password}
+                   onChange={e => setPassword(e.target.value)}
+                   className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                   placeholder="请输入旅行日记密码"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white/80 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {loginError && <p className="text-red-500 text-xs px-1">{loginError}</p>}
               <button 
                 type="submit" 

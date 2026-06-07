@@ -41,10 +41,41 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   });
   const [loading, setLoading] = useState(true);
 
+  const getValidToken = () => {
+    const decodeToken = (token: string) => {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      const payload = decodeToken(adminToken);
+      if (payload && payload.exp * 1000 > Date.now()) return adminToken;
+      localStorage.removeItem('admin_token');
+    }
+    
+    const travelToken = localStorage.getItem('travel_token');
+    if (travelToken) {
+      const payload = decodeToken(travelToken);
+      if (payload && payload.exp * 1000 > Date.now()) return travelToken;
+      localStorage.removeItem('travel_token');
+    }
+    
+    return null;
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('admin_token') || localStorage.getItem('travel_token');
+      const token = getValidToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
@@ -69,7 +100,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getHeaders = () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('travel_token');
+    const token = getValidToken();
     return {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
