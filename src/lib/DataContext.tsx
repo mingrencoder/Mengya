@@ -116,9 +116,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const { home } = await res.json();
-        const newData = data ? { ...data, home } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, home } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
@@ -136,9 +138,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const newTravel = await res.json();
-        const newData = data ? { ...data, travels: [...data.travels, newTravel] } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, travels: [...prev.travels, newTravel] } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
@@ -154,9 +158,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: getHeaders()
       });
       if (res.ok) {
-        const newData = data ? { ...data, travels: data.travels.filter(t => t.id !== id) } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, travels: prev.travels.filter(t => t.id !== id) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
@@ -174,9 +180,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const newBookmark = await res.json();
-        const newData = data ? { ...data, bookmarks: [...data.bookmarks, newBookmark] } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarks: [...prev.bookmarks, newBookmark] } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
@@ -192,9 +200,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: getHeaders()
       });
       if (res.ok) {
-        const newData = data ? { ...data, bookmarks: data.bookmarks.filter(b => b.id !== id) } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarks: prev.bookmarks.filter(b => b.id !== id) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
@@ -212,9 +222,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const updatedTravel = await res.json();
-        const newData = data ? { ...data, travels: data.travels.map(t => t.id === id ? updatedTravel : t) } : null;
-        setData(newData);
-        if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+        setData(prev => {
+          const newData = prev ? { ...prev, travels: prev.travels.map(t => t.id === id ? updatedTravel : t) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
         return true;
       }
     } catch (e) {
