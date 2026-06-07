@@ -224,6 +224,9 @@ export function Admin() {
 function DataExportImport({ token }: { token: string }) {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
+  const [exportProgress, setExportProgress] = useState('');
+
   const { refresh } = useData();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -241,12 +244,42 @@ function DataExportImport({ token }: { token: string }) {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportProgress('0%');
     try {
       const res = await fetch('/api/data/export', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const blob = await res.blob();
+        let blob: Blob;
+        if (res.body) {
+          const reader = res.body.getReader();
+          const contentLength = res.headers.get('Content-Length');
+          const uncompressedTotal = res.headers.get('X-Total-Size');
+          const total = contentLength ? parseInt(contentLength, 10) : (uncompressedTotal ? parseInt(uncompressedTotal, 10) : 0);
+          
+          let received = 0;
+          const chunks: Uint8Array[] = [];
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              chunks.push(value);
+              received += value.length;
+              if (total) {
+                let percent = Math.round((received / total) * 100);
+                if (percent > 99) percent = 99; // 保证展示的压缩进度合理
+                setExportProgress(`${percent}%`);
+              } else {
+                setExportProgress(`${(received / 1024 / 1024).toFixed(1)} MB`);
+              }
+            }
+          }
+          blob = new Blob(chunks, { type: 'application/zip' });
+        } else {
+          blob = await res.blob();
+        }
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -264,6 +297,7 @@ function DataExportImport({ token }: { token: string }) {
       showMessage('发生错误，或网络连接失败', true);
     } finally {
       setExporting(false);
+      setExportProgress('');
     }
   };
 
@@ -272,27 +306,48 @@ function DataExportImport({ token }: { token: string }) {
     if (!file) return;
 
     setImporting(true);
+    setImportProgress('0%');
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/data/import');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setImportProgress(`${Math.round((event.loaded / event.total) * 100)}%`);
+          } else {
+            setImportProgress(`${(event.loaded / 1024 / 1024).toFixed(1)} MB`);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              reject(new Error(res.error || '导入失败'));
+            } catch {
+              reject(new Error('导入失败'));
+            }
+          }
+        };
+        
+        xhr.onerror = () => reject(new Error('网络错误'));
+        xhr.send(formData);
       });
       
-      if (res.ok) {
-        await refresh();
-        showMessage('导入成功！数据已更新', false);
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        showMessage(errData.error || '导入失败', true);
-      }
-    } catch {
-      showMessage('发生错误，或网络连接失败', true);
+      await refresh();
+      showMessage('导入成功！数据已更新', false);
+    } catch (err: any) {
+      showMessage(err.message || '发生错误', true);
     } finally {
       setImporting(false);
+      setImportProgress('');
       e.target.value = ''; // Reset input
     }
   };
@@ -302,21 +357,31 @@ function DataExportImport({ token }: { token: string }) {
       <h2 className="text-xl font-medium">数据备份与恢复</h2>
       <p className="text-sm text-slate-600 dark:text-white/50">将您的所有数据及上传的照片打包为 ZIP 文件下载，或从 ZIP 文件恢复您的数据及照片。</p>
       
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <button
           type="button"
           onClick={handleExport}
           disabled={exporting || importing}
           className="px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : '导出数据包 (ZIP)'}
+          {exporting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>正在导出 {exportProgress}</span>
+            </>
+          ) : '导出数据包 (ZIP)'}
         </button>
         
         <label className={cn(
           "px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
           (importing || exporting) && "opacity-50 pointer-events-none"
         )}>
-          {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : '导入数据包 (ZIP)'}
+          {importing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>正在导入 {importProgress}</span>
+            </>
+          ) : '导入数据包 (ZIP)'}
           <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
         </label>
       </div>

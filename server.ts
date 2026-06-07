@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
+import { ZipArchive } from 'archiver';
 
 dotenv.config();
 
@@ -281,86 +282,78 @@ app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
 
 app.get('/api/data/export', authenticateToken, (req, res) => {
   try {
-    const homeData = services.home.read();
-    const travelsData = services.travels.readAll();
-    const bookmarksData = services.bookmarks.readAll();
+    const archive = new ZipArchive({ zlib: { level: 9 } });
 
-    const referencedUrls = new Set<string>();
-    if (homeData.avatarUrl) referencedUrls.add(homeData.avatarUrl);
-    if (homeData.customBlocks && Array.isArray(homeData.customBlocks)) {
-      homeData.customBlocks.forEach((b: any) => {
-        if (b.type === 'image' && b.url) referencedUrls.add(b.url);
-      });
-    }
-    travelsData.forEach(t => {
-      if (t.imageUrl) referencedUrls.add(t.imageUrl);
-      if (t.imageUrls) t.imageUrls.forEach(u => referencedUrls.add(u));
-    });
-    bookmarksData.forEach(b => {
-      if ((b as any).iconUrl) referencedUrls.add((b as any).iconUrl);
-      if ((b as any).coverUrl) referencedUrls.add((b as any).coverUrl);
-    });
-
-    const walkSync = (dir: string, filelist: string[] = []) => {
-      if (!fs.existsSync(dir)) return filelist;
+    // 计算所有文件的未压缩总大小，用于前端进度显示
+    let totalSize = 0;
+    const statSize = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
       fs.readdirSync(dir).forEach(file => {
         const filepath = path.join(dir, file);
-        if (fs.statSync(filepath).isDirectory()) {
-          filelist = walkSync(filepath, filelist);
+        const stat = fs.statSync(filepath);
+        if (stat.isDirectory()) {
+          statSize(filepath);
         } else {
-          filelist.push(filepath);
+          // 不导出密码配置文件
+          if (file === 'settings.json' || file === 'settings.json.tmp') return;
+          totalSize += stat.size;
         }
       });
-      return filelist;
     };
-
-    if (fs.existsSync(uploadDirBase)) {
-      const allFiles = walkSync(uploadDirBase);
-      allFiles.forEach(file => {
-        const relativePath = '/uploads/' + path.relative(uploadDirBase, file).replace(/\\/g, '/');
-        if (!referencedUrls.has(relativePath)) {
-          fs.unlinkSync(file);
-        }
-      });
-    }
-
-    const zip = new AdmZip();
-
+    
     const dataDir = path.resolve(process.cwd(), 'data');
+    const uploadDir = path.resolve(process.cwd(), 'public/uploads');
+    
+    statSize(dataDir);
+    statSize(uploadDir);
+
+    // 将总大小通过 header 返回给前端计算百分比
+    res.setHeader('X-Total-Size', totalSize.toString());
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Total-Size');
+    
+    res.attachment('export.zip');
+    archive.pipe(res);
+
+    archive.on('error', (err) => {
+      throw err;
+    });
+
     if (fs.existsSync(dataDir)) {
       const walkAndAddDecrypted = (dir: string, baseZipDir: string) => {
         fs.readdirSync(dir).forEach(file => {
           const filepath = path.join(dir, file);
           if (fs.statSync(filepath).isDirectory()) {
-            walkAndAddDecrypted(filepath, path.join(baseZipDir, file).replace(/\\/g, '/'));
+            walkAndAddDecrypted(filepath, `${baseZipDir}/${file}`);
+          } else if (file === 'settings.json' || file === 'settings.json.tmp') {
+            return; // Skip exporting sensitive settings
           } else if (file.endsWith('.json')) {
             const content = fs.readFileSync(filepath, 'utf-8');
             try {
               const decrypted = CoreStorage.decrypt(content);
               JSON.parse(decrypted); // ensure it's valid JSON
-              zip.addFile(`${baseZipDir}/${file}`, Buffer.from(decrypted, 'utf-8'));
+              archive.append(Buffer.from(decrypted, 'utf-8'), { name: `${baseZipDir}/${file}` });
             } catch (e) {
-              zip.addFile(`${baseZipDir}/${file}`, Buffer.from(content, 'utf-8'));
+              // fallback if not encrypted or invalid json
+              archive.file(filepath, { name: `${baseZipDir}/${file}` });
             }
           } else {
-             zip.addLocalFile(filepath, baseZipDir);
+             archive.file(filepath, { name: `${baseZipDir}/${file}` });
           }
         });
       };
       walkAndAddDecrypted(dataDir, 'data');
     }
 
-    const uploadDir = path.resolve(process.cwd(), 'public/uploads');
     if (fs.existsSync(uploadDir)) {
-      zip.addLocalFolder(uploadDir, 'public/uploads');
+      archive.directory(uploadDir, 'public/uploads');
     }
 
-    const buffer = zip.toBuffer();
-    res.attachment('export.zip');
-    res.send(buffer);
+    archive.finalize();
   } catch (error: any) {
     console.error('Export error:', error);
-    res.status(500).json({ error: 'Failed to export', message: error.message, stack: error.stack });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to export' });
+    }
   }
 });
 
