@@ -69,6 +69,8 @@ export function Travels() {
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [locationSearch, setLocationSearch] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -111,7 +113,7 @@ export function Travels() {
   // Reset cover flow index when pagination or filters change
   React.useEffect(() => {
     setCoverFlowIndex(0);
-  }, [currentPage, itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
+  }, [currentPage, itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, startDate, endDate, selectedLocations, selectedTags, showBookmarkedOnly]);
 
   // Extract filter options
   const filterOptions = useMemo(() => {
@@ -235,6 +237,13 @@ export function Travels() {
         }
       }
 
+      if (startDate && t.date < startDate) {
+         matchesYear = false;
+      }
+      if (endDate && t.date > endDate) {
+         matchesYear = false;
+      }
+
       // Location filtering
       const matchesLocation = selectedLocations.length > 0 
         ? selectedLocations.includes(t.location)
@@ -253,12 +262,12 @@ export function Travels() {
       const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
       return sortOrder === 'desc' ? diff : -diff;
     });
-  }, [data?.travels, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly, sortOrder]);
+  }, [data?.travels, searchQuery, selectedYear, selectedQuarter, selectedMonth, startDate, endDate, selectedLocations, selectedTags, showBookmarkedOnly, sortOrder]);
 
   // Reset page when filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, selectedLocations, selectedTags, showBookmarkedOnly]);
+  }, [itemsPerPage, searchQuery, selectedYear, selectedQuarter, selectedMonth, startDate, endDate, selectedLocations, selectedTags, showBookmarkedOnly]);
 
   const totalPages = Math.ceil(filteredTravels.length / itemsPerPage);
 
@@ -479,7 +488,7 @@ export function Travels() {
             <span>筛选</span>
             {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0) && (
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500 text-white text-[10px] ml-1">
-                {(selectedYear ? 1 : 0) + (selectedQuarter ? 1 : 0) + (selectedMonth ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
+                {(selectedYear ? 1 : 0) + (selectedQuarter ? 1 : 0) + (selectedMonth ? 1 : 0) + (startDate || endDate ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
               </span>
             )}
           </button>
@@ -496,8 +505,28 @@ export function Travels() {
           >
             <div className="glass p-4 rounded-xl mb-4 space-y-3 border border-white/10 text-sm shadow-sm relative">
               
-              {/* Row 1: Time (Year, Quarter, Month) */}
-              <div className="flex flex-wrap items-start gap-4">
+              {/* Row 1: Time (Year, Quarter, Month, and Custom Date Range) */}
+              <div className="flex flex-wrap items-center gap-4">
+                 
+                 <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-400 w-10 shrink-0">时间段</span>
+                    <input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-md py-1 px-2 text-xs focus:outline-none focus:border-indigo-500/50"
+                      style={{ colorScheme: 'dark' }}
+                    />
+                    <span className="text-slate-400 text-xs">-</span>
+                    <input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-md py-1 px-2 text-xs focus:outline-none focus:border-indigo-500/50"
+                      style={{ colorScheme: 'dark' }}
+                    />
+                 </div>
+
                  {/* Year */}
                  {filterOptions.years.length > 0 && (
                     <div className="flex items-center gap-2">
@@ -662,12 +691,14 @@ export function Travels() {
                       只显示收藏记录
                     </label>
 
-                    {(selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
+                    {(selectedYear || selectedQuarter || selectedMonth || startDate || endDate || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
                        <button 
                          onClick={() => {
                            setSelectedYear(null);
                            setSelectedQuarter(null);
                            setSelectedMonth(null);
+                           setStartDate('');
+                           setEndDate('');
                            setSelectedLocations([]);
                            setSelectedTags([]);
                            setShowBookmarkedOnly(false);
@@ -690,13 +721,15 @@ export function Travels() {
       {filteredTravels.length === 0 ? (
         <div className="py-20 text-center glass rounded-3xl border border-dashed border-white/10">
           <p className="text-slate-400 dark:text-white/40">没找到符合条件的旅行记录，换个搜索词或筛选条件试试吧。</p>
-          {(searchQuery || selectedYear || selectedQuarter || selectedMonth || selectedLocations.length > 0) && (
+          {(searchQuery || selectedYear || selectedQuarter || selectedMonth || startDate || endDate || selectedLocations.length > 0) && (
              <button
                onClick={() => {
                  setSearchQuery('');
                  setSelectedYear(null);
                  setSelectedQuarter(null);
                  setSelectedMonth(null);
+                 setStartDate('');
+                 setEndDate('');
                  setSelectedLocations([]);
                  setLocationSearch('');
                }}

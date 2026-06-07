@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle, Home, Map, Bookmark, Settings, Eye, EyeOff } from 'lucide-react';
+import { Lock, LogOut, Plus, Upload, Loader2, Trash2, X, Search, Filter, Calendar, MapPin, GripVertical, CheckCircle, XCircle, Home, Map, Bookmark, Settings, Eye, EyeOff, Tag } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CustomBlock, HomeData } from '../types';
@@ -1118,24 +1118,31 @@ function TravelAdder({ token }: { token: string }) {
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
   const [batchTagsStr, setBatchTagsStr] = useState('');
   const [batchLoading, setBatchLoading] = useState(false);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // Extract filter options
   const filterOptions = React.useMemo(() => {
-    if (!data?.travels) return { years: [], months: [], locations: [] };
+    if (!data?.travels) return { years: [], months: [], locations: [], tags: [] };
     
     const years = new Set<string>();
     const months = new Set<string>();
     const locations = new Set<string>();
+    const tags = new Set<string>();
 
     data.travels.forEach(t => {
       if (t.location) locations.add(t.location);
+      if (t.tags) t.tags.forEach(tag => tags.add(tag));
       
       const d = new Date(t.date);
       if (!isNaN(d.getTime())) {
@@ -1150,7 +1157,8 @@ function TravelAdder({ token }: { token: string }) {
     return {
       years: Array.from(years).sort().reverse(),
       months: Array.from(months).sort(),
-      locations: Array.from(locations).sort()
+      locations: Array.from(locations).sort(),
+      tags: Array.from(tags).sort()
     };
   }, [data?.travels, selectedYear]);
 
@@ -1170,12 +1178,20 @@ function TravelAdder({ token }: { token: string }) {
     );
   };
 
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
   const filteredTravels = React.useMemo(() => {
     if (!data?.travels) return [];
     
     return data.travels.filter(t => {
       const matchesSearch = searchQuery 
-        ? t.title?.toLowerCase().includes(searchQuery.toLowerCase()) || t.location?.toLowerCase().includes(searchQuery.toLowerCase())
+        ? t.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+          t.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
         : true;
 
       let matchesYear = true;
@@ -1192,13 +1208,22 @@ function TravelAdder({ token }: { token: string }) {
         }
       }
 
+      if (startDate && t.date < startDate) matchesYear = false;
+      if (endDate && t.date > endDate) matchesYear = false;
+
       const matchesLocation = selectedLocations.length > 0 
         ? selectedLocations.includes(t.location)
         : true;
 
-      return matchesSearch && matchesYear && matchesMonth && matchesLocation;
+      const matchesTags = selectedTags.length > 0
+        ? selectedTags.every(tag => t.tags?.includes(tag))
+        : true;
+
+      const matchesBookmarked = showBookmarkedOnly ? t.bookmarked === true : true;
+
+      return matchesSearch && matchesYear && matchesMonth && matchesLocation && matchesTags && matchesBookmarked;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [data?.travels, searchQuery, selectedYear, selectedMonth, selectedLocations]);
+  }, [data?.travels, searchQuery, selectedYear, selectedMonth, startDate, endDate, selectedLocations, selectedTags, showBookmarkedOnly]);
 
   const startEdit = (travel: any) => {
     setEditingId(travel.id);
@@ -1247,6 +1272,12 @@ function TravelAdder({ token }: { token: string }) {
       setForm({ ...form, coverImageIndex: Math.max(0, totalCount - 1) });
     }
   };
+
+  // Tag Edit State
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [newTagVal, setNewTagVal] = useState('');
+  const [tagLoading, setTagLoading] = useState(false);
+  const [showTagManager, setShowTagManager] = useState(false);
 
   const confirmDeleteTravel = async () => {
     if (!deleteConfirm) return;
@@ -1482,16 +1513,16 @@ function TravelAdder({ token }: { token: string }) {
                   onClick={() => setShowFilters(!showFilters)}
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
-                    showFilters || selectedYear || selectedMonth || selectedLocations.length > 0
+                    showFilters || selectedYear || selectedMonth || startDate || endDate || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly
                       ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
                       : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
                   )}
                 >
                   <Filter className="w-3.5 h-3.5" />
-                  筛查
-                  {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
+                  筛选
+                  {(selectedYear || selectedMonth || startDate || endDate || selectedLocations.length > 0 || selectedTags.length > 0) && (
                     <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] ml-0.5">
-                      {(selectedYear ? 1 : 0) + (selectedMonth ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0)}
+                      {(selectedYear ? 1 : 0) + (selectedMonth ? 1 : 0) + (startDate || endDate ? 1 : 0) + (selectedLocations.length > 0 ? 1 : 0) + (selectedTags.length > 0 ? 1 : 0)}
                     </span>
                   )}
                 </button>
@@ -1501,7 +1532,7 @@ function TravelAdder({ token }: { token: string }) {
             {selectedForBatch.length > 0 && (
               <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all">
                 <span className="text-sm font-medium text-indigo-300">已选择 {selectedForBatch.length} 项</span>
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                   <input
                     placeholder="批量打标签 (逗号分隔)"
                     value={batchTagsStr}
@@ -1525,11 +1556,23 @@ function TravelAdder({ token }: { token: string }) {
                       setBatchTagsStr('');
                       setSelectedForBatch([]);
                       setBatchLoading(false);
+                      showMessage("批量标签添加成功", false, () => window.location.reload());
                     }}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
                   >
                     {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
                     追加标签
+                  </button>
+                  <button
+                    type="button"
+                    disabled={batchLoading}
+                    onClick={() => {
+                      setBatchDeleteConfirm(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-500 hover:bg-red-500/30 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                  >
+                    {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
+                    批量删除
                   </button>
                   <button
                     type="button"
@@ -1552,6 +1595,30 @@ function TravelAdder({ token }: { token: string }) {
                 className="overflow-hidden"
               >
                 <div className="bg-black/20 p-4 rounded-xl space-y-4 border border-white/5 mt-2">
+                  {/* Date Range Filter */}
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3" /> 时间段筛选
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="date" 
+                        value={startDate} 
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded-md py-1 px-2 text-xs focus:outline-none focus:border-indigo-500/50"
+                        style={{ colorScheme: 'dark' }}
+                      />
+                      <span className="text-slate-400 text-xs">-</span>
+                      <input 
+                        type="date" 
+                        value={endDate} 
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded-md py-1 px-2 text-xs focus:outline-none focus:border-indigo-500/50"
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </div>
+                  </div>
+
                   {/* Year Filter */}
                   {filterOptions.years.length > 0 && (
                     <div className="space-y-2">
@@ -1633,15 +1700,60 @@ function TravelAdder({ token }: { token: string }) {
                     </div>
                   )}
 
+                  {/* Tags Filter */}
+                  {filterOptions.tags.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                         按标签 (多选)
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filterOptions.tags.map(tag => {
+                          const isSelected = selectedTags.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => toggleTag(tag)}
+                              className={cn(
+                                "px-2.5 py-1 rounded-md text-xs font-medium transition-all border",
+                                isSelected 
+                                  ? "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/50" 
+                                  : "bg-white/5 text-slate-300 border-transparent hover:bg-white/10"
+                              )}
+                            >
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-white/5">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-white/70 hover:text-white transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={showBookmarkedOnly}
+                        onChange={(e) => setShowBookmarkedOnly(e.target.checked)}
+                        className="rounded border-white/20 bg-black/20 w-4 h-4 text-indigo-500 focus:ring-indigo-500/50 transition-colors"
+                      />
+                      只显示收藏记录
+                    </label>
+                  </div>
+
                   {/* Reset Selection */}
-                  {(selectedYear || selectedMonth || selectedLocations.length > 0) && (
+                  {(selectedYear || selectedMonth || startDate || endDate || selectedLocations.length > 0 || selectedTags.length > 0 || showBookmarkedOnly) && (
                     <div className="pt-2 border-t border-white/5 flex justify-end">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedYear(null);
                           setSelectedMonth(null);
+                          setStartDate('');
+                          setEndDate('');
                           setSelectedLocations([]);
+                          setSelectedTags([]);
+                          setShowBookmarkedOnly(false);
                         }}
                         className="text-[10px] text-slate-400 hover:text-white transition-colors flex items-center gap-1"
                       >
@@ -1653,6 +1765,80 @@ function TravelAdder({ token }: { token: string }) {
                 </div>
               </motion.div>
             )}
+          </AnimatePresence>
+
+          <div className="flex items-center justify-end mt-4">
+            <button
+               type="button"
+               onClick={() => setShowTagManager(!showTagManager)}
+               className={cn(
+                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                 showTagManager 
+                   ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                   : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
+               )}
+            >
+               <Tag className="w-3.5 h-3.5" />
+               {showTagManager ? '收起标签管理' : '管理所有标签（重命名）'}
+            </button>
+          </div>
+
+          <AnimatePresence>
+             {showTagManager && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                   <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-3">
+                      <h4 className="text-xs font-semibold text-white/70">所有标签 ({filterOptions.tags.length})</h4>
+                      {filterOptions.tags.length === 0 && <p className="text-xs text-white/30">暂无标签</p>}
+                      <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                         {filterOptions.tags.map(tag => (
+                            <div key={tag} className="flex items-center justify-between gap-4 border-b border-white/5 pb-2">
+                               {editingTag === tag ? (
+                                  <div className="flex items-center gap-2 w-full">
+                                     <input 
+                                       value={newTagVal} 
+                                       onChange={e => setNewTagVal(e.target.value)} 
+                                       placeholder="新标签名" 
+                                       className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500" 
+                                     />
+                                     <button 
+                                        type="button" 
+                                        disabled={tagLoading || !newTagVal.trim()}
+                                        onClick={async () => {
+                                           if (!updateTravel || !newTagVal.trim()) return;
+                                           setTagLoading(true);
+                                           const finalNewTag = newTagVal.trim();
+                                           let updatedCount = 0;
+                                           for (const t of data.travels) {
+                                              if (t.tags && t.tags.includes(tag)) {
+                                                 const newTags = t.tags.map(x => x === tag ? finalNewTag : x);
+                                                 // remove duplicates if replacing with an existing tag
+                                                 const dedupedTags = Array.from(new Set(newTags));
+                                                 await updateTravel(t.id, { tags: dedupedTags });
+                                                 updatedCount++;
+                                              }
+                                           }
+                                           setTagLoading(false);
+                                           setEditingTag(null);
+                                           showMessage(`已更新 ${updatedCount} 条记录的标签`, false, () => window.location.reload());
+                                        }}
+                                        className="text-[10px] bg-indigo-500 text-white px-2 py-1 rounded hover:bg-indigo-400 disabled:opacity-50"
+                                     >
+                                        {tagLoading ? '保存中...' : '保存'}
+                                     </button>
+                                     <button type="button" onClick={() => setEditingTag(null)} className="text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">取消</button>
+                                  </div>
+                               ) : (
+                                  <>
+                                     <span className="text-xs text-white flex-1">{tag}</span>
+                                     <button type="button" onClick={() => { setEditingTag(tag); setNewTagVal(tag); }} className="text-[10px] text-indigo-300 hover:underline shrink-0">重命名</button>
+                                  </>
+                               )}
+                            </div>
+                         ))}
+                      </div>
+                   </div>
+                </motion.div>
+             )}
           </AnimatePresence>
 
           <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
@@ -1706,6 +1892,23 @@ function TravelAdder({ token }: { token: string }) {
         message="确定要删除这条旅行记录吗？一旦删除将无法恢复，关联的服务器图片也会被永久移除。"
         onConfirm={confirmDeleteTravel}
         onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmModal
+        isOpen={batchDeleteConfirm}
+        title="批量删除记录"
+        message={`确定要删除选中的 ${selectedForBatch.length} 项记录吗？一旦删除将无法恢复，关联的服务器图片也会被永久移除。`}
+        onConfirm={async () => {
+          setBatchDeleteConfirm(false);
+          setBatchLoading(true);
+          for (const id of selectedForBatch) {
+            await deleteTravel(id);
+          }
+          setSelectedForBatch([]);
+          setBatchLoading(false);
+          showMessage("批量删除成功", false, () => window.location.reload());
+        }}
+        onCancel={() => setBatchDeleteConfirm(false)}
       />
       
       <MessageModal 
