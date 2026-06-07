@@ -249,13 +249,19 @@ function DataExportImport({ token }: { token: string }) {
   const [exporting, setExporting] = useState(false);
   const [importProgress, setImportProgress] = useState('');
   const [exportProgress, setExportProgress] = useState('');
+  const [backupProgress, setBackupProgress] = useState('');
 
-  const { refresh } = useData();
+  const { refresh, data } = useData();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalIsError, setModalIsError] = useState(false);
   const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
+
+  // Backup Settings Form State
+  const [backupSettings, setBackupSettings] = useState(() => data?.backupSettings || { enabled: false, frequency: 'daily', dayOfWeek: 1, time: '02:00', retentionCount: 1 });
+  const [savingBackup, setSavingBackup] = useState(false);
+  const [triggeringBackup, setTriggeringBackup] = useState(false);
 
   const showMessage = (msg: string, isErr: boolean = false, cb?: () => void) => {
     setModalMessage(msg);
@@ -265,7 +271,7 @@ function DataExportImport({ token }: { token: string }) {
     setModalOpen(true);
   };
 
-  const handleExport = async () => {
+  const handleExport = async () => { /* ... existing handleExport ... */
     setExporting(true);
     setExportProgress('0%');
     try {
@@ -291,7 +297,7 @@ function DataExportImport({ token }: { token: string }) {
               received += value.length;
               if (total) {
                 let percent = Math.round((received / total) * 100);
-                if (percent > 99) percent = 99; // 保证展示的压缩进度合理
+                if (percent > 99) percent = 99;
                 setExportProgress(`${percent}%`);
               } else {
                 setExportProgress(`${(received / 1024 / 1024).toFixed(1)} MB`);
@@ -371,42 +377,224 @@ function DataExportImport({ token }: { token: string }) {
     } finally {
       setImporting(false);
       setImportProgress('');
-      e.target.value = ''; // Reset input
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveBackupSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBackup(true);
+    try {
+      const res = await fetch('/api/data/backup/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(backupSettings)
+      });
+      if (res.ok) {
+        showMessage('备份设置保存成功', false);
+        await refresh();
+      } else {
+        showMessage('配置保存失败', true);
+      }
+    } catch {
+      showMessage('网络错误', true);
+    } finally {
+      setSavingBackup(false);
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    setTriggeringBackup(true);
+    setBackupProgress('0%');
+    try {
+      const res = await fetch('/api/data/backup/trigger', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let done = false;
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  if (data.type === 'progress') {
+                    setBackupProgress(`${data.progress}%`);
+                  } else if (data.type === 'complete') {
+                    showMessage(`备份成功！文件已保存至: backups/${data.filename}`, false);
+                    done = true;
+                  } else if (data.type === 'error') {
+                    showMessage(data.message || '备份执行失败', true);
+                    done = true;
+                  }
+                } catch (e) {
+                  // ignore parse error
+                }
+              }
+            }
+          }
+        }
+      } else {
+        showMessage('备份执行失败', true);
+      }
+    } catch {
+      showMessage('网络错误', true);
+    } finally {
+      setTriggeringBackup(false);
+      setBackupProgress('');
     }
   };
 
   return (
-    <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 flex-1 h-fit">
-      <h2 className="text-xl font-medium">数据备份与恢复</h2>
-      <p className="text-sm text-slate-600 dark:text-white/50">将您的所有数据及上传的照片打包为 ZIP 文件下载，或从 ZIP 文件恢复您的数据及照片。</p>
-      
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting || importing}
-          className="px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          {exporting ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>正在导出 {exportProgress}</span>
-            </>
-          ) : '导出数据包 (ZIP)'}
-        </button>
+    <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-8 flex-1 h-fit">
+      <div>
+        <h2 className="text-xl font-medium">数据导出与恢复</h2>
+        <p className="text-sm text-slate-600 dark:text-white/50 mt-2 mb-4">将您的所有数据及上传的照片打包为 ZIP 文件下载到本地，或从 ZIP 文件恢复您的数据及照片。</p>
         
-        <label className={cn(
-          "px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
-          (importing || exporting) && "opacity-50 pointer-events-none"
-        )}>
-          {importing ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>正在导入 {importProgress}</span>
-            </>
-          ) : '导入数据包 (ZIP)'}
-          <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
-        </label>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || importing}
+            className="px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>正在导出 {exportProgress}</span>
+              </>
+            ) : '下载数据包 (ZIP)'}
+          </button>
+          
+          <label className={cn(
+            "px-6 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer",
+            (importing || exporting) && "opacity-50 pointer-events-none"
+          )}>
+            {importing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>正在导入 {importProgress}</span>
+              </>
+            ) : '导入数据包 (ZIP)'}
+            <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
+          </label>
+        </div>
+      </div>
+
+      <div className="pt-6 border-t border-slate-200 dark:border-white/10">
+        <h2 className="text-xl font-medium">服务器自动备份</h2>
+        <p className="text-sm text-slate-600 dark:text-white/50 mt-2 mb-4">开启自动备份后，系统会定时将数据打包备份至服务器根目录的 backups 文件夹下。</p>
+        
+        <form onSubmit={handleSaveBackupSettings} className="space-y-4">
+          <div className="flex items-center gap-3">
+            <input 
+              type="checkbox" 
+              id="enableBackup"
+              checked={backupSettings.enabled}
+              onChange={(e) => setBackupSettings({ ...backupSettings, enabled: e.target.checked })}
+              className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 bg-black/20 border-white/10"
+            />
+            <label htmlFor="enableBackup" className="text-sm cursor-pointer select-none">启用定时备份</label>
+          </div>
+
+          <AnimatePresence>
+            {backupSettings.enabled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-4 overflow-hidden"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-white/50 px-1">备份频率</label>
+                    <select
+                      value={backupSettings.frequency}
+                      onChange={(e) => setBackupSettings({ ...backupSettings, frequency: e.target.value as 'daily' | 'weekly' })}
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm text-slate-700 dark:text-white"
+                    >
+                      <option value="daily">每天</option>
+                      <option value="weekly">每周</option>
+                    </select>
+                  </div>
+
+                  {backupSettings.frequency === 'weekly' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-white/50 px-1">周几备份</label>
+                      <select
+                        value={backupSettings.dayOfWeek}
+                        onChange={(e) => setBackupSettings({ ...backupSettings, dayOfWeek: parseInt(e.target.value) })}
+                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm text-slate-700 dark:text-white"
+                      >
+                        <option value="1">周一</option>
+                        <option value="2">周二</option>
+                        <option value="3">周三</option>
+                        <option value="4">周四</option>
+                        <option value="5">周五</option>
+                        <option value="6">周六</option>
+                        <option value="0">周日</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-white/50 px-1">执行时间</label>
+                    <input
+                      type="time"
+                      value={backupSettings.time}
+                      onChange={(e) => setBackupSettings({ ...backupSettings, time: e.target.value })}
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-white/50 px-1">保留最近备份份数 ({backupSettings.retentionCount})</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={backupSettings.retentionCount}
+                      onChange={(e) => setBackupSettings({ ...backupSettings, retentionCount: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={savingBackup}
+              className="w-full sm:w-auto bg-white/10 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
+            >
+              {savingBackup ? <Loader2 className="w-4 h-4 animate-spin" /> : '保存定时设置'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleTriggerBackup}
+              disabled={triggeringBackup}
+              className="w-full sm:w-auto bg-indigo-500 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {triggeringBackup ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>备份中 {backupProgress}</span>
+                </>
+              ) : '立即执行备份'}
+            </button>
+          </div>
+        </form>
       </div>
 
       <MessageModal 

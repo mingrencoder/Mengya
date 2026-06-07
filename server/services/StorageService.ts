@@ -192,9 +192,16 @@ export const services = {
     description: "欢迎来到我的个人网络空间。",
     welcomeMessage: "你好，生活记录者！"
   }),
-  settings: new SingletonService<{passwordHash: string, travelPasswordHash?: string}>('settings', {
+  settings: new SingletonService<{passwordHash: string, travelPasswordHash?: string, backupSettings?: any}>('settings', {
     passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'supersecretpassword'),
-    travelPasswordHash: hashPassword('123321')
+    travelPasswordHash: hashPassword('123321'),
+    backupSettings: {
+      enabled: false,
+      frequency: 'daily',
+      dayOfWeek: 1,
+      time: '02:00',
+      retentionCount: 1
+    }
   }),
   travels: new CollectionService<TravelData>('travels'),
   bookmarks: new CollectionService<BookmarkData>('bookmarks')

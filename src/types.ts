@@ -35,6 +35,14 @@ export interface BookmarkData {
   category?: string;
 }
 
+export interface BackupSettings {
+  enabled: boolean;
+  frequency: 'daily' | 'weekly';
+  dayOfWeek?: number;
+  time: string;
+  retentionCount: number;
+}
+
 export interface PlatformData {
   home: HomeData;
   travels: TravelData[];
@@ -43,4 +51,5 @@ export interface PlatformData {
   settings?: {
     passwordHash: string;
   };
+  backupSettings?: BackupSettings;
 }

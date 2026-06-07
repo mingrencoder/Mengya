@@ -4,10 +4,12 @@ import cors from 'cors';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import { services, hashPassword, CoreStorage } from './server/services/StorageService';
+import { BackupService, addImagesToArchive } from './server/services/BackupService';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
+// @ts-ignore
 import { ZipArchive } from 'archiver';
 
 dotenv.config();
@@ -16,6 +18,9 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+
+// Initialize Backup Scheduler
+BackupService.initialize();
 
 app.use(cors());
 app.use(express.json());
@@ -72,9 +77,11 @@ app.get('/api/data', (req, res) => {
     let token = authHeader && authHeader.split(' ')[1];
     
     let isTravelAuthorized = false;
+    let isAdmin = false;
     if (token) {
       try {
         const decoded: any = jwt.verify(token, JWT_SECRET);
+        if (decoded.role === 'admin' || decoded.admin) isAdmin = true;
         if (decoded.role === 'admin' || decoded.role === 'travel' || decoded.admin) {
           isTravelAuthorized = true;
         }
@@ -83,12 +90,21 @@ app.get('/api/data', (req, res) => {
       }
     }
 
-    const data = {
+    const data: any = {
       home: services.home.read(),
       travels: isTravelAuthorized ? services.travels.readAll() : [],
       isTravelAuthorized,
       bookmarks: services.bookmarks.readAll()
     };
+    if (isAdmin) {
+      data.backupSettings = services.settings.read().backupSettings || {
+        enabled: false,
+        frequency: 'daily',
+        dayOfWeek: 1,
+        time: '02:00',
+        retentionCount: 1
+      };
+    }
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read data' });
@@ -280,6 +296,42 @@ app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
   }
 });
 
+app.put('/api/data/backup/settings', authenticateToken, (req, res) => {
+  try {
+    const backupSettings = req.body;
+    const settings = services.settings.read();
+    settings.backupSettings = backupSettings;
+    services.settings.write(settings);
+    BackupService.scheduleNextBackup();
+    res.json({ success: true, backupSettings });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update backup settings' });
+  }
+});
+
+app.post('/api/data/backup/trigger', authenticateToken, async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const settings = services.settings.read();
+    const retentionCount = settings.backupSettings?.retentionCount || 1;
+    const filename = await BackupService.performBackup(retentionCount, (progress) => {
+      sendEvent({ type: 'progress', progress });
+    });
+    sendEvent({ type: 'complete', filename });
+    res.end();
+  } catch (error) {
+    sendEvent({ type: 'error', message: 'Failed to perform backup' });
+    res.end();
+  }
+});
+
 app.get('/api/data/export', authenticateToken, (req, res) => {
   try {
     const archive = new ZipArchive({ zlib: { level: 9 } });
@@ -344,9 +396,7 @@ app.get('/api/data/export', authenticateToken, (req, res) => {
       walkAndAddDecrypted(dataDir, 'data');
     }
 
-    if (fs.existsSync(uploadDir)) {
-      archive.directory(uploadDir, 'public/uploads');
-    }
+    addImagesToArchive(archive);
 
     archive.finalize();
   } catch (error: any) {
@@ -398,10 +448,37 @@ app.post('/api/data/import', authenticateToken, upload.single('file'), (req, res
     }
 
     const extractedUploadsDir = path.join(extractDir, 'public/uploads');
+    const targetUploadsDir = path.resolve(process.cwd(), 'public/uploads');
+
     if (fs.existsSync(extractedUploadsDir)) {
-      const targetUploadsDir = path.resolve(process.cwd(), 'public/uploads');
-      if (!fs.existsSync(targetUploadsDir)) fs.mkdirSync(targetUploadsDir, { recursive: true });
-      fs.cpSync(extractedUploadsDir, targetUploadsDir, { recursive: true });
+      const walkAndCopyDir = (src: string, dest: string, subdir: string = '') => {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          fs.readdirSync(src).forEach(file => {
+              const srcFile = path.join(src, file);
+              const currentSubdir = subdir ? `${subdir}/${file}` : file;
+
+              if (fs.statSync(srcFile).isDirectory()) {
+                  walkAndCopyDir(srcFile, dest, currentSubdir);
+              } else {
+                  let targetPath = path.join(dest, currentSubdir);
+                  
+                  const parts = currentSubdir.replace(/\\/g, '/').split('/');
+                  if (parts[0] === 'travels' && parts.length > 2) {
+                      // Flatten travel images
+                      targetPath = path.join(dest, 'travels', file);
+                      if (!fs.existsSync(path.join(dest, 'travels'))) {
+                          fs.mkdirSync(path.join(dest, 'travels'), { recursive: true });
+                      }
+                  } else {
+                      const parentDir = path.dirname(targetPath);
+                      if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+                  }
+
+                  fs.copyFileSync(srcFile, targetPath);
+              }
+          });
+      };
+      walkAndCopyDir(extractedUploadsDir, targetUploadsDir);
     }
 
     fs.rmSync(extractDir, { recursive: true, force: true });
