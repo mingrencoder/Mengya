@@ -184,6 +184,32 @@ export class CollectionService<T extends { id: string }> {
     }
     return null;
   }
+
+  public writeAll(items: T[]) {
+    const chunks = this.getChunks();
+    for (const chunk of chunks) {
+      fs.unlinkSync(path.join(this.dirPath, chunk));
+    }
+
+    let currentChunkNum = 1;
+    let currentChunkData: T[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      currentChunkData.push(items[i]);
+      const estimatedSize = Buffer.byteLength(JSON.stringify(currentChunkData), 'utf-8');
+      if (estimatedSize > (MAX_CHUNK_SIZE / 2) && i !== items.length - 1) {
+        const filePath = path.join(this.dirPath, `chunk_${currentChunkNum}.json`);
+        CoreStorage.writeAtomic(filePath, currentChunkData);
+        currentChunkNum++;
+        currentChunkData = [];
+      }
+    }
+
+    if (currentChunkData.length > 0) {
+      const filePath = path.join(this.dirPath, `chunk_${currentChunkNum}.json`);
+      CoreStorage.writeAtomic(filePath, currentChunkData);
+    }
+  }
 }
 
 export const services = {

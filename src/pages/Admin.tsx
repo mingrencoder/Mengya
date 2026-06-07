@@ -258,6 +258,10 @@ function DataExportImport({ token }: { token: string }) {
   const [modalIsError, setModalIsError] = useState(false);
   const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
 
+  // Conflict Resolution States
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflictData, setConflictData] = useState<{tempDirId: string, localOnlyCount: number} | null>(null);
+
   // Backup Settings Form State
   const [backupSettings, setBackupSettings] = useState(() => data?.backupSettings || { enabled: false, frequency: 'daily', dayOfWeek: 1, time: '02:00', retentionCount: 1 });
   const [savingBackup, setSavingBackup] = useState(false);
@@ -269,6 +273,47 @@ function DataExportImport({ token }: { token: string }) {
     if (cb) setModalCallback(() => cb);
     else setModalCallback(null);
     setModalOpen(true);
+  };
+
+  const executeConflictResolution = async (strategy: 'merge' | 'replace') => {
+    if (!conflictData) return;
+    setImporting(true);
+    setImportProgress('处理中...');
+    setConflictModalOpen(false);
+    try {
+      const res = await fetch('/api/data/import/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ tempDirId: conflictData.tempDirId, strategy })
+      });
+      if (res.ok) {
+        await refresh();
+        showMessage('导入成功！数据已更新', false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showMessage(err.error || '执行导入失败', true);
+      }
+    } catch {
+      showMessage('执行导入时发生错误', true);
+    } finally {
+      setImporting(false);
+      setImportProgress('');
+      setConflictData(null);
+    }
+  };
+
+  const cancelConflictResolution = async () => {
+    if (!conflictData) return;
+    setConflictModalOpen(false);
+    try {
+      await fetch('/api/data/import/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ tempDirId: conflictData.tempDirId })
+      });
+    } catch {}
+    setConflictData(null);
+    showMessage('导入已取消', false);
   };
 
   const handleExport = async () => { /* ... existing handleExport ... */
@@ -309,10 +354,19 @@ function DataExportImport({ token }: { token: string }) {
           blob = await res.blob();
         }
 
+        let filename = 'export.zip';
+        const disposition = res.headers.get('Content-Disposition');
+        if (disposition && disposition.includes('filename=')) {
+          const matches = disposition.match(/filename="?([^";]+)"?/);
+          if (matches && matches[1]) {
+            filename = matches[1];
+          }
+        }
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'export.zip';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -340,9 +394,9 @@ function DataExportImport({ token }: { token: string }) {
     formData.append('file', file);
 
     try {
-      await new Promise<void>((resolve, reject) => {
+      const result = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/data/import');
+        xhr.open('POST', '/api/data/import/analyze');
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         
         xhr.upload.onprogress = (event) => {
@@ -355,13 +409,17 @@ function DataExportImport({ token }: { token: string }) {
 
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch {
+              resolve({ status: 'success' });
+            }
           } else {
             try {
               const res = JSON.parse(xhr.responseText);
-              reject(new Error(res.error || '导入失败'));
+              reject(new Error(res.error || '导入分析失败'));
             } catch {
-              reject(new Error('导入失败'));
+              reject(new Error('导入分析失败'));
             }
           }
         };
@@ -370,11 +428,19 @@ function DataExportImport({ token }: { token: string }) {
         xhr.send(formData);
       });
       
-      await refresh();
-      showMessage('导入成功！数据已更新', false);
+      if (result.status === 'conflict') {
+        setConflictData({ tempDirId: result.tempDirId, localOnlyCount: result.localOnlyCount });
+        setConflictModalOpen(true);
+        // We do not set Importing to false here, so the loader remains hidden until resolution
+      } else {
+        await refresh();
+        showMessage('导入成功！数据已更新', false);
+      }
     } catch (err: any) {
       showMessage(err.message || '发生错误', true);
     } finally {
+      // In case of conflict, we keep uploading state? No, we shouldn't show upload spinner during conflict dialog.
+      // So we can set it to false here.
       setImporting(false);
       setImportProgress('');
       e.target.value = '';
@@ -606,6 +672,44 @@ function DataExportImport({ token }: { token: string }) {
           if (modalCallback) modalCallback();
         }} 
       />
+
+      {createPortal(
+        <AnimatePresence>
+          {conflictModalOpen && conflictData && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={cancelConflictResolution}>
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: -20 }}
+                className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-white/10"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex flex-col text-center space-y-4">
+                  <div className="mx-auto bg-amber-100 dark:bg-amber-900/30 text-amber-500 rounded-full w-12 h-12 flex items-center justify-center">
+                    <X className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-xl font-bold dark:text-white pb-2">发现冲突数据</h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    发现本地有 <strong className="text-indigo-500">{conflictData.localOnlyCount}</strong> 条记录不在导入包中。您希望如何处理？
+                  </p>
+                  <div className="flex flex-col gap-3 mt-4">
+                    <button onClick={() => executeConflictResolution('merge')} className="bg-indigo-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-indigo-600 transition-colors text-sm">
+                      合并保留 (推荐)
+                    </button>
+                    <button onClick={() => executeConflictResolution('replace')} className="bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white px-4 py-3 rounded-xl font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-sm">
+                      仅保留导入数据 
+                    </button>
+                    <button onClick={cancelConflictResolution} className="mt-2 text-slate-500 hover:text-slate-700 dark:hover:text-white/80 transition-colors text-sm font-medium">
+                      取消导入
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </section>
   );
 }
