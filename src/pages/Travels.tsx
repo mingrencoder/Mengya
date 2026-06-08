@@ -1333,14 +1333,17 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
   
   const isDragging = React.useRef(false);
   const lastMousePos = React.useRef({ x: 0, y: 0 });
+  const lastTouchDist = React.useRef<number | null>(null);
+
+  const scaleRef = React.useRef(scale);
+  React.useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
 
   const mappedNodes = useMemo(() => {
-    const total = footprintNodes.length;
-    const spacingMultiplier = total < 10 ? 80 : Math.max(35, 80 - total); 
-    
     return footprintNodes.map((node, index) => {
       const angle = index * 2.39996; // 黄金角度
-      const radius = 20 + Math.pow(index, 0.75) * spacingMultiplier; 
+      const radius = 25 + Math.sqrt(index) * 60; 
       const x = Math.cos(angle) * radius;
       const y = Math.sin(angle) * radius;
       return { ...node, x, y, index };
@@ -1349,13 +1352,36 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
 
   React.useEffect(() => {
     if (mappedNodes.length > 0) {
-      let sumX = 0;
-      let sumY = 0;
-      mappedNodes.forEach(n => { sumX += n.x; sumY += n.y; });
-      const avgX = sumX / mappedNodes.length;
-      const avgY = sumY / mappedNodes.length;
-      setPan({ x: -avgX, y: -avgY });
-      setScale(1); // reset scale
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+      
+      mappedNodes.forEach(n => {
+        minX = Math.min(minX, n.x - 50);
+        maxX = Math.max(maxX, n.x + 50);
+        minY = Math.min(minY, n.y - 50);
+        maxY = Math.max(maxY, n.y + 50);
+      });
+
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      const el = containerRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const boxWidth = Math.max(maxX - minX, 100);
+        const boxHeight = Math.max(maxY - minY, 100);
+        
+        const scaleX = (rect.width * 0.85) / boxWidth;
+        const scaleY = (rect.height * 0.85) / boxHeight;
+        
+        const initialScale = Math.min(Math.max(0.2, Math.min(scaleX, scaleY)), 3);
+        
+        setScale(initialScale);
+      } else {
+        setScale(1);
+      }
+      
+      setPan({ x: -cx, y: -cy });
     }
   }, [mappedNodes]);
 
@@ -1370,7 +1396,7 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
       const deltaScale = -e.deltaY * zoomFactor;
       
       setScale(oldScale => {
-        const newScale = Math.min(Math.max(0.3, oldScale + deltaScale * oldScale), 3);
+        const newScale = Math.min(Math.max(0.2, oldScale + deltaScale * oldScale), 3);
         if (newScale === oldScale) return oldScale;
 
         const rect = el.getBoundingClientRect();
@@ -1380,8 +1406,8 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
         const dy = cy - rect.height / 2;
 
         setPan(oldPan => ({
-          x: dx - (dx - oldPan.x) * (newScale / oldScale),
-          y: dy - (dy - oldPan.y) * (newScale / oldScale)
+          x: oldPan.x + dx / newScale - dx / oldScale,
+          y: oldPan.y + dy / newScale - dy / oldScale
         }));
 
         return newScale;
@@ -1404,13 +1430,72 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
     lastMousePos.current = { x: e.clientX, y: e.clientY };
     
     setPan(prev => ({
-      x: prev.x + dx,
-      y: prev.y + dy
+      x: prev.x + dx / scaleRef.current,
+      y: prev.y + dy / scaleRef.current
     }));
   };
 
   const handleMouseUp = () => {
     isDragging.current = false;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      isDragging.current = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.hypot(dx, dy);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isDragging.current) {
+      const dx = e.touches[0].clientX - lastMousePos.current.x;
+      const dy = e.touches[0].clientY - lastMousePos.current.y;
+      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      
+      setPan(prev => ({
+        x: prev.x + dx / scaleRef.current,
+        y: prev.y + dy / scaleRef.current
+      }));
+    } else if (e.touches.length === 2 && lastTouchDist.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      
+      const ratio = dist / lastTouchDist.current;
+      lastTouchDist.current = dist;
+      
+      const touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      
+      setScale(oldScale => {
+        const newScale = Math.min(Math.max(0.2, oldScale * ratio), 3);
+        if (newScale === oldScale) return oldScale;
+        
+        const el = containerRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const screenDx = touchCx - rect.left - rect.width / 2;
+          const screenDy = touchCy - rect.top - rect.height / 2;
+          
+          setPan(oldPan => ({
+            x: oldPan.x + screenDx / newScale - screenDx / oldScale,
+            y: oldPan.y + screenDy / newScale - screenDy / oldScale
+          }));
+        }
+        
+        return newScale;
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    lastTouchDist.current = null;
   };
 
   const stars = useMemo(() => Array.from({length: 150}).map(() => ({
@@ -1420,11 +1505,15 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-[600px] md:h-[800px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-8 cursor-grab active:cursor-grabbing"
+      className="relative w-full h-[600px] md:h-[800px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-8 cursor-grab active:cursor-grabbing touch-none"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {/* Starfield background */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-60">
