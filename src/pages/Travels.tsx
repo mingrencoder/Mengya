@@ -1327,47 +1327,136 @@ export function Travels() {
 }
 
 function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) {
-  const stars = useMemo(() => Array.from({length: 150}).map((_, i) => ({
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  
+  const isDragging = React.useRef(false);
+  const lastMousePos = React.useRef({ x: 0, y: 0 });
+
+  const mappedNodes = useMemo(() => {
+    const total = footprintNodes.length;
+    const spacingMultiplier = total < 10 ? 80 : Math.max(35, 80 - total); 
+    
+    return footprintNodes.map((node, index) => {
+      const angle = index * 2.39996; // 黄金角度
+      const radius = 20 + Math.pow(index, 0.75) * spacingMultiplier; 
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      return { ...node, x, y, index };
+    });
+  }, [footprintNodes]);
+
+  React.useEffect(() => {
+    if (mappedNodes.length > 0) {
+      let sumX = 0;
+      let sumY = 0;
+      mappedNodes.forEach(n => { sumX += n.x; sumY += n.y; });
+      const avgX = sumX / mappedNodes.length;
+      const avgY = sumY / mappedNodes.length;
+      setPan({ x: -avgX, y: -avgY });
+      setScale(1); // reset scale
+    }
+  }, [mappedNodes]);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      const zoomFactor = 0.002;
+      const deltaScale = -e.deltaY * zoomFactor;
+      
+      setScale(oldScale => {
+        const newScale = Math.min(Math.max(0.3, oldScale + deltaScale * oldScale), 3);
+        if (newScale === oldScale) return oldScale;
+
+        const rect = el.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const dx = cx - rect.width / 2;
+        const dy = cy - rect.height / 2;
+
+        setPan(oldPan => ({
+          x: dx - (dx - oldPan.x) * (newScale / oldScale),
+          y: dy - (dy - oldPan.y) * (newScale / oldScale)
+        }));
+
+        return newScale;
+      });
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastMousePos.current.x;
+    const dy = e.clientY - lastMousePos.current.y;
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    
+    setPan(prev => ({
+      x: prev.x + dx,
+      y: prev.y + dy
+    }));
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
+
+  const stars = useMemo(() => Array.from({length: 150}).map(() => ({
     x: Math.random() * 100, y: Math.random() * 100, r: Math.random() * 1.5, o: Math.random() * 0.5 + 0.1
   })), []);
   
   return (
-    <div className="relative w-full h-[600px] md:h-[800px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-8">
+    <div 
+      ref={containerRef}
+      className="relative w-full h-[600px] md:h-[800px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-8 cursor-grab active:cursor-grabbing"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {/* Starfield background */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-60">
         {stars.map((s,i) => <circle key={`star-${i}`} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="#e2e8f0" opacity={s.o} />)}
       </svg>
 
-      {/* Galaxy SVG Connection Lines */}
-      <svg className="absolute top-1/2 left-1/2 overflow-visible pointer-events-none opacity-50">
-        <polyline
-          points={footprintNodes.map((n, i) => {
-            const angle = i * 2.39996;
-            const radius = 20 + Math.pow(i, 0.7) * 35;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            return `${x},${y}`;
-          }).join(' ')}
-          fill="none"
-          stroke="url(#galaxy-gradient)"
-          strokeWidth="1.5"
-          strokeDasharray="4 6"
-        />
-        <defs>
-          <linearGradient id="galaxy-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-             <stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" />
-             <stop offset="100%" stopColor="#fcd34d" stopOpacity="0.2" />
-          </linearGradient>
-        </defs>
-      </svg>
+      <div 
+        style={{ 
+          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${scale})`, 
+          transformOrigin: 'center' 
+        }} 
+        className="absolute top-1/2 left-1/2 w-0 h-0 transition-transform duration-75 ease-out"
+      >
+        {/* Galaxy SVG Connection Lines */}
+        <svg className="absolute overflow-visible pointer-events-none opacity-50">
+          <polyline
+            points={mappedNodes.map(n => `${n.x},${n.y}`).join(' ')}
+            fill="none"
+            stroke="url(#galaxy-gradient)"
+            strokeWidth="1.5"
+            strokeDasharray="4 6"
+          />
+          <defs>
+            <linearGradient id="galaxy-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+               <stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" />
+               <stop offset="100%" stopColor="#fcd34d" stopOpacity="0.2" />
+            </linearGradient>
+          </defs>
+        </svg>
 
-      {/* Nodes Plotting */}
-      <div className="absolute top-1/2 left-1/2">
-        {footprintNodes.map((node, i) => {
-          const angle = i * 2.39996;
-          const radius = 20 + Math.pow(i, 0.7) * 35;
-          const x = Math.cos(angle) * radius;
-          const y = Math.sin(angle) * radius;
+        {/* Nodes Plotting */}
+        {mappedNodes.map((node) => {
           const isBookmarked = node.bookmarked;
           const size = 12 + Math.min(node.count * 2, 20);
 
@@ -1375,7 +1464,7 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
             <div 
               key={node.name}
               className="absolute flex items-center justify-center -translate-x-1/2 -translate-y-1/2 group z-10 hover:z-50"
-              style={{ left: x, top: y }}
+              style={{ left: node.x, top: node.y }}
             >
                {/* The Planet */}
                <div className={cn(
