@@ -1279,6 +1279,12 @@ function TravelAdder({ token }: { token: string }) {
   const [tagLoading, setTagLoading] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
 
+  // Location Edit State
+  const [editingLocation, setEditingLocation] = useState<string | null>(null);
+  const [newLocationVal, setNewLocationVal] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [showLocationManager, setShowLocationManager] = useState(false);
+
   const confirmDeleteTravel = async () => {
     if (!deleteConfirm) return;
     try {
@@ -1530,57 +1536,61 @@ function TravelAdder({ token }: { token: string }) {
             </div>
 
             {selectedForBatch.length > 0 && (
-              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all">
-                <span className="text-sm font-medium text-indigo-300">已选择 {selectedForBatch.length} 项</span>
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  <input
-                    placeholder="批量打标签 (逗号分隔)"
-                    value={batchTagsStr}
-                    onChange={(e) => setBatchTagsStr(e.target.value)}
-                    className="flex-1 min-w-[150px] bg-black/20 border border-indigo-500/30 rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-400 text-indigo-100"
-                  />
-                  <button
-                    type="button"
-                    disabled={batchLoading || !updateTravel}
-                    onClick={async () => {
-                      if (!updateTravel) return;
-                      setBatchLoading(true);
-                      const tags = batchTagsStr.split(',').map(s => s.trim()).filter(Boolean);
-                      for (const id of selectedForBatch) {
-                        const travel = data.travels.find(t => t.id === id);
-                        if (travel) {
-                          const newTags = Array.from(new Set([...(travel.tags || []), ...tags]));
-                          await updateTravel(id, { tags: newTags });
+              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 transition-all">
+                <span className="text-sm font-medium text-indigo-300 whitespace-nowrap">已选择 {selectedForBatch.length} 项</span>
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                  <div className="flex items-center gap-2 pr-3 border-r border-indigo-500/30">
+                    <input
+                      placeholder="批量打标签 (逗号分隔)"
+                      value={batchTagsStr}
+                      onChange={(e) => setBatchTagsStr(e.target.value)}
+                      className="w-[140px] bg-black/20 border border-indigo-500/30 rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-400 text-indigo-100"
+                    />
+                    <button
+                      type="button"
+                      disabled={batchLoading || !updateTravel || !batchTagsStr.trim()}
+                      onClick={async () => {
+                        if (!updateTravel || !batchTagsStr.trim()) return;
+                        setBatchLoading(true);
+                        const tags = batchTagsStr.split(',').map(s => s.trim()).filter(Boolean);
+                        for (const id of selectedForBatch) {
+                          const travel = data.travels.find(t => t.id === id);
+                          if (travel) {
+                            const newTags = Array.from(new Set([...(travel.tags || []), ...tags]));
+                            await updateTravel(id, { tags: newTags });
+                          }
                         }
-                      }
-                      setBatchTagsStr('');
-                      setSelectedForBatch([]);
-                      setBatchLoading(false);
-                      showMessage("批量标签添加成功", false, () => window.location.reload());
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
-                  >
-                    {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
-                    追加标签
-                  </button>
-                  <button
-                    type="button"
-                    disabled={batchLoading}
-                    onClick={() => {
-                      setBatchDeleteConfirm(true);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-500 hover:bg-red-500/30 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
-                  >
-                    {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
-                    批量删除
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedForBatch([]); setBatchTagsStr(''); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 transition-colors whitespace-nowrap"
-                  >
-                    取消
-                  </button>
+                        setBatchTagsStr('');
+                        setSelectedForBatch([]);
+                        setBatchLoading(false);
+                        showMessage("批量标签添加成功", false, () => window.location.reload());
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                    >
+                      {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
+                      追加标签
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={batchLoading}
+                      onClick={() => {
+                        setBatchDeleteConfirm(true);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-500 hover:bg-red-500/30 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                    >
+                      {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
+                      批量删除
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedForBatch([]); setBatchTagsStr(''); }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 transition-colors whitespace-nowrap"
+                    >
+                      取消
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1767,10 +1777,29 @@ function TravelAdder({ token }: { token: string }) {
             )}
           </AnimatePresence>
 
-          <div className="flex items-center justify-end mt-4">
+          <div className="flex items-center justify-end mt-4 gap-2">
             <button
                type="button"
-               onClick={() => setShowTagManager(!showTagManager)}
+               onClick={() => {
+                 setShowLocationManager(!showLocationManager);
+                 if (!showLocationManager) setShowTagManager(false);
+               }}
+               className={cn(
+                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                 showLocationManager 
+                   ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                   : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
+               )}
+            >
+               <MapPin className="w-3.5 h-3.5" />
+               {showLocationManager ? '收起地点管理' : '管理所有地点（重命名）'}
+            </button>
+            <button
+               type="button"
+               onClick={() => {
+                 setShowTagManager(!showTagManager);
+                 if (!showTagManager) setShowLocationManager(false);
+               }}
                className={cn(
                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
                  showTagManager 
@@ -1782,6 +1811,61 @@ function TravelAdder({ token }: { token: string }) {
                {showTagManager ? '收起标签管理' : '管理所有标签（重命名）'}
             </button>
           </div>
+
+          <AnimatePresence>
+             {showLocationManager && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                   <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-3 mb-4">
+                      <h4 className="text-xs font-semibold text-white/70">所有地点 ({filterOptions.locations.length})</h4>
+                      {filterOptions.locations.length === 0 && <p className="text-xs text-white/30">暂无地点</p>}
+                      <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                         {filterOptions.locations.map(loc => (
+                            <div key={loc} className="flex items-center justify-between gap-4 border-b border-white/5 pb-2">
+                               {editingLocation === loc ? (
+                                  <div className="flex items-center gap-2 w-full">
+                                     <input 
+                                       value={newLocationVal} 
+                                       onChange={e => setNewLocationVal(e.target.value)} 
+                                       placeholder="新地点名" 
+                                       className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500" 
+                                     />
+                                     <button 
+                                        type="button" 
+                                        disabled={locationLoading || !newLocationVal.trim()}
+                                        onClick={async () => {
+                                           if (!updateTravel || !newLocationVal.trim()) return;
+                                           setLocationLoading(true);
+                                           const finalNewLoc = newLocationVal.trim();
+                                           let updatedCount = 0;
+                                           for (const t of data.travels) {
+                                              if (t.location === loc) {
+                                                 await updateTravel(t.id, { location: finalNewLoc });
+                                                 updatedCount++;
+                                              }
+                                           }
+                                           setLocationLoading(false);
+                                           setEditingLocation(null);
+                                           showMessage(`已更新 ${updatedCount} 条记录的地点`, false, () => window.location.reload());
+                                        }}
+                                        className="text-[10px] bg-indigo-500 text-white px-2 py-1 rounded hover:bg-indigo-400 disabled:opacity-50"
+                                     >
+                                        {locationLoading ? '保存中...' : '保存'}
+                                     </button>
+                                     <button type="button" onClick={() => setEditingLocation(null)} className="text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">取消</button>
+                                  </div>
+                               ) : (
+                                  <>
+                                     <span className="text-xs text-white flex-1">{loc}</span>
+                                     <button type="button" onClick={() => { setEditingLocation(loc); setNewLocationVal(loc); }} className="text-[10px] text-indigo-300 hover:underline shrink-0">重命名</button>
+                                  </>
+                               )}
+                            </div>
+                         ))}
+                      </div>
+                   </div>
+                </motion.div>
+             )}
+          </AnimatePresence>
 
           <AnimatePresence>
              {showTagManager && (
