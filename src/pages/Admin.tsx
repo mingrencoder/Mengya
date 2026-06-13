@@ -89,9 +89,10 @@ export function Admin() {
         body: JSON.stringify({ password })
       });
       if (res.ok) {
-        const data = await res.json();
-        setToken(data.token);
-        localStorage.setItem('admin_token', data.token);
+        const resData = await res.json();
+        localStorage.setItem('admin_token', resData.token);
+        await refresh();
+        setToken(resData.token);
       } else {
         setError('密码错误');
       }
@@ -244,12 +245,165 @@ export function Admin() {
   );
 }
 
+function BackupListModal({ isOpen, onClose, token, onRestore }: { isOpen: boolean; onClose: () => void; token: string, onRestore?: (filename: string) => void }) {
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchBackups();
+    }
+  }, [isOpen]);
+
+  const fetchBackups = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/data/backup/list', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setBackups(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownload = (filename: string) => {
+    window.location.href = `/api/data/backup/download/${filename}?token=${token}`;
+  };
+
+  const handleDelete = async (filename: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/data/backup/${filename}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchBackups();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(false);
+      setDeleteConfirm(null);
+    }
+  };
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: -20 }}
+            className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-white/10"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold dark:text-white">本地备份列表</h3>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full text-slate-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                </div>
+              ) : backups.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">暂无备份记录</div>
+              ) : (
+                backups.map(b => (
+                  <div key={b.filename} className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+                    <div className="flex flex-col gap-1 overflow-hidden">
+                      <span className="font-medium text-sm truncate max-w-[200px] sm:max-w-[240px]">{b.filename}</span>
+                      <span className="text-xs text-slate-500">{new Date(b.time).toLocaleString()} - {(b.size / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {onRestore && (
+                        <button
+                          onClick={() => setRestoreConfirm(b.filename)}
+                          className="px-4 py-1.5 shrink-0 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-lg text-sm font-medium hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors"
+                        >
+                          还原
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDownload(b.filename)}
+                        className="px-4 py-1.5 shrink-0 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors"
+                      >
+                        下载
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(b.filename)}
+                        disabled={deleting && deleteConfirm === b.filename}
+                        className="p-1.5 shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="删除备份"
+                      >
+                        {deleting && deleteConfirm === b.filename ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+
+          <ConfirmModal
+            isOpen={restoreConfirm !== null}
+            title="确认还原"
+            message={`确定要将存档还原为此版本 (${restoreConfirm}) 吗？此操作将覆盖现有数据，且不可逆。`}
+            confirmText="确认还原"
+            type="warning"
+            onConfirm={() => {
+              if (restoreConfirm && onRestore) {
+                onRestore(restoreConfirm);
+              }
+              setRestoreConfirm(null);
+            }}
+            onCancel={() => setRestoreConfirm(null)}
+          />
+
+          <ConfirmModal
+            isOpen={deleteConfirm !== null}
+            title="删除备份文件"
+            message={`确定要删除此备份 (${deleteConfirm}) 吗？此操作将永久删除该文件，且不可恢复。`}
+            confirmText="确认删除"
+            type="danger"
+            onConfirm={() => {
+              if (deleteConfirm) {
+                handleDelete(deleteConfirm);
+              }
+            }}
+            onCancel={() => setDeleteConfirm(null)}
+          />
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+}
+
 function DataExportImport({ token }: { token: string }) {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importProgress, setImportProgress] = useState('');
   const [exportProgress, setExportProgress] = useState('');
   const [backupProgress, setBackupProgress] = useState('');
+  const [backupListOpen, setBackupListOpen] = useState(false);
 
   const { refresh, data } = useData();
 
@@ -447,8 +601,44 @@ function DataExportImport({ token }: { token: string }) {
     }
   };
 
-  const handleSaveBackupSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRestoreBackup = async (filename: string) => {
+    setBackupListOpen(false); // Close the modal
+    setImporting(true);
+    setImportProgress('还原中...');
+
+    try {
+      const res = await fetch('/api/data/import/analyze_backup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ filename })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '还原失败');
+      }
+
+      const result = await res.json();
+      if (result.status === 'conflict') {
+        setConflictData({ tempDirId: result.tempDirId, localOnlyCount: result.localOnlyCount });
+        setConflictModalOpen(true);
+      } else {
+        await refresh();
+        showMessage('还原成功！数据已更新', false);
+      }
+    } catch (err: any) {
+      showMessage(err.message || '发生错误', true);
+    } finally {
+      setImporting(false);
+      setImportProgress('');
+    }
+  };
+
+  const handleSaveBackupSettings = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     setSavingBackup(true);
     try {
       const res = await fetch('/api/data/backup/settings', {
@@ -560,15 +750,39 @@ function DataExportImport({ token }: { token: string }) {
         <p className="text-sm text-slate-600 dark:text-white/50 mt-2 mb-4">开启自动备份后，系统会定时将数据打包备份至服务器根目录的 backups 文件夹下。</p>
         
         <form onSubmit={handleSaveBackupSettings} className="space-y-4">
-          <div className="flex items-center gap-3">
-            <input 
-              type="checkbox" 
-              id="enableBackup"
-              checked={backupSettings.enabled}
-              onChange={(e) => setBackupSettings({ ...backupSettings, enabled: e.target.checked })}
-              className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 bg-black/20 border-white/10"
-            />
-            <label htmlFor="enableBackup" className="text-sm cursor-pointer select-none">启用定时备份</label>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                id="enableBackup"
+                checked={backupSettings.enabled}
+                onChange={(e) => setBackupSettings({ ...backupSettings, enabled: e.target.checked })}
+                className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 bg-black/20 border-white/10"
+              />
+              <label htmlFor="enableBackup" className="text-sm cursor-pointer select-none">启用定时备份</label>
+            </div>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <label className="text-xs text-slate-500 dark:text-white/50 shrink-0">保留最近备份份数</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={backupSettings.retentionCount}
+                  onChange={(e) => setBackupSettings({ ...backupSettings, retentionCount: parseInt(e.target.value) || 1 })}
+                  className="w-20 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveBackupSettings}
+                  disabled={savingBackup}
+                  className="bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
           </div>
 
           <AnimatePresence>
@@ -620,18 +834,6 @@ function DataExportImport({ token }: { token: string }) {
                       className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
                     />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-white/50 px-1">保留最近备份份数 ({backupSettings.retentionCount})</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={backupSettings.retentionCount}
-                      onChange={(e) => setBackupSettings({ ...backupSettings, retentionCount: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
-                    />
-                  </div>
                 </div>
               </motion.div>
             )}
@@ -659,9 +861,19 @@ function DataExportImport({ token }: { token: string }) {
                 </>
               ) : '立即执行备份'}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setBackupListOpen(true)}
+              className="w-full sm:w-auto border border-indigo-500 text-indigo-500 hover:bg-indigo-500 hover:text-white px-6 py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center"
+            >
+              查看本地备份
+            </button>
           </div>
         </form>
       </div>
+
+      <BackupListModal isOpen={backupListOpen} onClose={() => setBackupListOpen(false)} token={token} onRestore={handleRestoreBackup} />
 
       <MessageModal 
         isOpen={modalOpen} 

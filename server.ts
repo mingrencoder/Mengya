@@ -332,6 +332,41 @@ app.post('/api/data/backup/trigger', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/data/backup/list', authenticateToken, (req, res) => {
+  try {
+    const list = BackupService.listBackups();
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+app.get('/api/data/backup/download/:filename', authenticateToken, (req, res) => {
+  try {
+    const filepath = BackupService.getBackupPath(req.params.filename);
+    if (!filepath) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+    res.download(filepath, req.params.filename);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to download backup' });
+  }
+});
+
+app.delete('/api/data/backup/:filename', authenticateToken, (req, res) => {
+  try {
+    const filepath = BackupService.getBackupPath(req.params.filename);
+    if (!filepath) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+    fs.unlinkSync(filepath);
+    res.json({ success: true, message: 'Backup deleted successfully' });
+  } catch (error) {
+    console.error('Failed to delete backup:', error);
+    res.status(500).json({ error: 'Failed to delete backup' });
+  }
+});
+
 app.get('/api/data/export', authenticateToken, (req, res) => {
   try {
     const archive = new ZipArchive({ zlib: { level: 9 } });
@@ -586,6 +621,50 @@ app.post('/api/data/import/analyze', authenticateToken, upload.single('file'), a
     console.error('Import analyze error:', error);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: 'Failed to analyze import' });
+  }
+});
+
+app.post('/api/data/import/analyze_backup', authenticateToken, async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) {
+      return res.status(400).json({ error: 'No backup filename provided' });
+    }
+
+    const backupPath = BackupService.getBackupPath(filename);
+    if (!backupPath) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    const tempDirId = 'temp_import_' + Date.now();
+    const extractDir = path.resolve(process.cwd(), tempDirId);
+    
+    const zip = new AdmZip(backupPath);
+    zip.extractAllTo(extractDir, true);
+
+    const tempTravelsDir = path.join(extractDir, 'data', 'travels');
+    let importedTravels: any[] = [];
+    if (fs.existsSync(tempTravelsDir)) {
+      const chunks = fs.readdirSync(tempTravelsDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempTravelsDir, chunk)) || [];
+        if (Array.isArray(data)) importedTravels = importedTravels.concat(data);
+      }
+    }
+
+    const localTravels = services.travels.readAll();
+    const importedTravelIds = new Set(importedTravels.map(t => t.id));
+    const localOnlyCount = localTravels.filter(t => !importedTravelIds.has(t.id)).length;
+
+    if (localOnlyCount > 0) {
+      return res.json({ status: 'conflict', tempDirId, localOnlyCount });
+    }
+
+    await performImport(extractDir, 'merge');
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Import analyze backup error:', error);
+    res.status(500).json({ error: 'Failed to analyze backup import' });
   }
 });
 

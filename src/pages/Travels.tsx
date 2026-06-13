@@ -52,8 +52,8 @@ export function Travels() {
       if (res.ok) {
         const { token } = await res.json();
         localStorage.setItem('travel_token', token);
+        await refresh();
         setTravelToken(token);
-        refresh();
       } else {
         setLoginError('密码错误');
       }
@@ -332,9 +332,10 @@ export function Travels() {
     if (!data?.travels) return [];
     const aggregated = data.travels.reduce((acc: any, curr: any) => {
       if (!acc[curr.location]) {
-        acc[curr.location] = { name: curr.location, count: 0, bookmarked: false, lastDate: curr.date };
+        acc[curr.location] = { name: curr.location, count: 0, bookmarked: false, lastDate: curr.date, records: [] };
       }
       acc[curr.location].count += 1;
+      acc[curr.location].records.push(curr);
       if (curr.bookmarked) acc[curr.location].bookmarked = true;
       if (new Date(curr.date) > new Date(acc[curr.location].lastDate)) {
         acc[curr.location].lastDate = curr.date;
@@ -405,14 +406,15 @@ export function Travels() {
 
   return (
     <div className="space-y-6">
-      <div className="sticky -top-8 z-40 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md pt-8 pb-4 border-b border-transparent transition-all">
-      <header className='flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6'>
+      <div className="relative md:sticky -top-8 z-40 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md pt-8 pb-4 border-b border-transparent transition-all">
+        <div className="max-w-6xl mx-auto">
+          <header className='flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6'>
         <div>
           <div className="flex items-center gap-3">
             <h1 className='text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center'>
               旅行记录
               <button
-                onClick={() => setViewMode('matrix')}
+                onClick={() => setViewMode(prev => prev === 'matrix' ? 'grid' : 'matrix')}
                 className={cn(
                   "ml-4 p-2 rounded-full transition-all flex items-center justify-center",
                   viewMode === 'matrix' 
@@ -763,6 +765,7 @@ export function Travels() {
           </motion.div>
         )}
       </AnimatePresence>
+        </div>
       </div>
 
       {filteredTravels.length === 0 ? (
@@ -909,7 +912,7 @@ export function Travels() {
           )}
 
           {viewMode === 'grid' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {paginatedTravels.map((travel, i) => {
                 const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
                 const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
@@ -1105,7 +1108,7 @@ export function Travels() {
           )}
 
           {viewMode === 'story' && (
-             <div className="space-y-16 md:space-y-0 py-8 md:py-16">
+             <div className="space-y-16 md:space-y-0 py-8 md:py-16 max-w-6xl mx-auto">
                 {paginatedTravels.map((travel, index) => {
                    const rawCoverImage = (travel.imageUrls && travel.imageUrls[travel.coverImageIndex || 0]) || travel.imageUrl;
                    const coverImage = rawCoverImage && !failedImages[travel.id] ? rawCoverImage : null;
@@ -1177,7 +1180,7 @@ export function Travels() {
           )}
 
           {viewMode === 'matrix' && (
-            <ConstellationMatrixView footprintNodes={footprintNodes} />
+            <ConstellationMatrixView footprintNodes={footprintNodes} openLightbox={openLightbox} />
           )}
 
           {viewMode !== 'matrix' && totalPages > 1 && (
@@ -1241,7 +1244,7 @@ export function Travels() {
             </div>
           )}
           
-          {totalPages <= 1 && filteredTravels.length > 0 && (
+          {viewMode !== 'matrix' && totalPages <= 1 && filteredTravels.length > 0 && (
             <div className="flex justify-center items-center mt-8">
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-white/5 border border-slate-200 dark:border-white/10 rounded-full px-3 py-1.5">
                 <span>每页显示</span>
@@ -1326,10 +1329,12 @@ export function Travels() {
   );
 }
 
-function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) {
+function ConstellationMatrixView({ footprintNodes, openLightbox }: { footprintNodes: any[], openLightbox: (travel: any) => void }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [activeNodeName, setActiveNodeName] = useState<string | null>(null);
+  const [focusLocation, setFocusLocation] = useState<string | null>(null);
   
   const isDragging = React.useRef(false);
   const lastMousePos = React.useRef({ x: 0, y: 0 });
@@ -1349,6 +1354,10 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
       return { ...node, x, y, index };
     });
   }, [footprintNodes]);
+
+  const focusedNode = useMemo(() => {
+    return mappedNodes.find(n => n.name === focusLocation);
+  }, [mappedNodes, focusLocation]);
 
   React.useEffect(() => {
     if (mappedNodes.length > 0) {
@@ -1390,6 +1399,7 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
     if (!el) return;
     
     const handleWheel = (e: WheelEvent) => {
+      if (focusLocation) return;
       e.preventDefault();
       
       const zoomFactor = 0.002;
@@ -1416,15 +1426,17 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
 
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [focusLocation]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (focusLocation) return;
     isDragging.current = true;
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current) return;
+    if (focusLocation || !isDragging.current) return;
+    setActiveNodeName(null);
     const dx = e.clientX - lastMousePos.current.x;
     const dy = e.clientY - lastMousePos.current.y;
     lastMousePos.current = { x: e.clientX, y: e.clientY };
@@ -1440,6 +1452,7 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (focusLocation) return;
     if (e.touches.length === 1) {
       isDragging.current = true;
       lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -1452,6 +1465,8 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (focusLocation) return;
+    setActiveNodeName(null);
     if (e.touches.length === 1 && isDragging.current) {
       const dx = e.touches[0].clientX - lastMousePos.current.x;
       const dy = e.touches[0].clientY - lastMousePos.current.y;
@@ -1505,7 +1520,10 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-[600px] md:h-[800px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-8 cursor-grab active:cursor-grabbing touch-none"
+      className={cn(
+        "relative w-full h-[calc(100vh-140px)] min-h-[600px] bg-[#030305] rounded-3xl overflow-hidden border border-white/5 my-0",
+        !focusLocation ? "cursor-grab active:cursor-grabbing touch-none" : ""
+      )}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -1514,85 +1532,211 @@ function ConstellationMatrixView({ footprintNodes }: { footprintNodes: any[] }) 
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onClick={() => !focusLocation && setActiveNodeName(null)}
     >
       {/* Starfield background */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-60">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-60 z-0">
         {stars.map((s,i) => <circle key={`star-${i}`} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="#e2e8f0" opacity={s.o} />)}
       </svg>
 
+      {/* Macro Universe */}
       <div 
-        style={{ 
-          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${scale})`, 
-          transformOrigin: 'center' 
-        }} 
-        className="absolute top-1/2 left-1/2 w-0 h-0 transition-transform duration-75 ease-out"
+        className={cn(
+          "absolute inset-0 transition-all duration-1000 origin-center z-10",
+          focusLocation ? "scale-[3] opacity-0 blur-3xl pointer-events-none" : "scale-100 opacity-100 pointer-events-auto"
+        )}
       >
-        {/* Galaxy SVG Connection Lines */}
-        <svg className="absolute overflow-visible pointer-events-none opacity-50">
-          <polyline
-            points={mappedNodes.map(n => `${n.x},${n.y}`).join(' ')}
-            fill="none"
-            stroke="url(#galaxy-gradient)"
-            strokeWidth="1.5"
-            strokeDasharray="4 6"
-          />
-          <defs>
-            <linearGradient id="galaxy-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-               <stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" />
-               <stop offset="100%" stopColor="#fcd34d" stopOpacity="0.2" />
-            </linearGradient>
-          </defs>
-        </svg>
+        <div 
+          style={{ 
+            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${scale})`, 
+            transformOrigin: 'center' 
+          }} 
+          className="absolute top-1/2 left-1/2 w-0 h-0 transition-transform duration-75 ease-out"
+        >
+          {/* Galaxy SVG Connection Lines */}
+          <svg className="absolute overflow-visible pointer-events-none opacity-50">
+            <polyline
+              points={mappedNodes.map(n => `${n.x},${n.y}`).join(' ')}
+              fill="none"
+              stroke="url(#galaxy-gradient)"
+              strokeWidth="1.5"
+              strokeDasharray="4 6"
+            />
+            <defs>
+              <linearGradient id="galaxy-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                 <stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" />
+                 <stop offset="100%" stopColor="#fcd34d" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+          </svg>
 
-        {/* Nodes Plotting */}
-        {mappedNodes.map((node) => {
-          const isBookmarked = node.bookmarked;
-          const size = 12 + Math.min(node.count * 2, 20);
+          {/* Nodes Plotting */}
+          {mappedNodes.map((node) => {
+            const isBookmarked = node.bookmarked;
+            const size = 12 + Math.min(node.count * 2, 20);
 
-          return (
-            <div 
-              key={node.name}
-              className="absolute flex items-center justify-center -translate-x-1/2 -translate-y-1/2 group z-10 hover:z-50"
-              style={{ left: node.x, top: node.y }}
+            return (
+              <div 
+                key={node.name}
+                className="absolute flex items-center justify-center -translate-x-1/2 -translate-y-1/2 group z-10 hover:z-50"
+                style={{ left: node.x, top: node.y }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFocusLocation(node.name);
+                  setActiveNodeName(null);
+                }}
+                onMouseEnter={() => {
+                  if (!focusLocation) setActiveNodeName(node.name);
+                }}
+                onMouseLeave={() => {
+                  if (!focusLocation) setActiveNodeName(null);
+                }}
+              >
+                 {/* The Planet */}
+                 <div className={cn(
+                    "rounded-full flex items-center justify-center transition-[transform,box-shadow] duration-300 hover:scale-[1.3] cursor-pointer shadow-lg",
+                    isBookmarked ? "bg-amber-400" : "bg-indigo-400"
+                 )}
+                 style={{ 
+                    width: size, 
+                    height: size,
+                    boxShadow: isBookmarked ? '0 0 16px rgba(251, 191, 36, 0.6)' : '0 0 12px rgba(129, 140, 248, 0.4)'
+                 }}>
+                    {isBookmarked && <Crown className="w-3 h-3 text-amber-900 absolute opacity-80" />}
+                 </div>
+
+                 {/* Constant minimalist text */}
+                 <div className={cn(
+                    "absolute top-full mt-1.5 text-[10px] whitespace-nowrap pointer-events-none transition-opacity",
+                    isBookmarked ? "text-amber-200/90 font-medium" : "text-slate-300/80",
+                    activeNodeName === node.name && "opacity-100 !text-white"
+                 )}>
+                    {node.name}
+                    {node.count > 1 && <span className="ml-1 opacity-70">x{node.count}</span>}
+                 </div>
+
+                 {/* Hover Details Card (Glassmorphism) */}
+                 <div className={cn(
+                    "absolute bottom-full mb-3 transition-opacity duration-300 pointer-events-none z-20 w-max shadow-2xl",
+                    activeNodeName === node.name ? "opacity-100" : "opacity-0 lg:group-hover:opacity-100"
+                 )}>
+                    <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 text-xs flex flex-col gap-1.5 min-w-[120px]">
+                       <div className="text-white font-bold text-sm tracking-wide">{node.name}</div>
+                       <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]" />
+                          <span className="text-slate-300">打卡 <span className="text-white font-mono font-medium">{node.count}</span> 次</span>
+                       </div>
+                       <div className="text-slate-400 text-[10px] mt-1 pt-1.5 border-t border-white/5">
+                          最近: {node.lastDate}
+                       </div>
+                    </div>
+                 </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Micro Universe */}
+      <div 
+        className={cn(
+          "absolute inset-0 transition-all duration-1000 flex items-center justify-center z-20",
+          focusLocation ? "scale-100 opacity-100 pointer-events-auto delay-150" : "scale-50 opacity-0 pointer-events-none"
+        )}
+      >
+        {focusLocation && focusedNode && (
+          <>
+            <button 
+              onClick={() => {
+                setFocusLocation(null);
+                setActiveNodeName(null);
+              }}
+              className="absolute top-6 left-6 pl-2 pr-4 pl pr py-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-50 flex items-center gap-1 shadow-xl border border-white/10 backdrop-blur-md"
             >
-               {/* The Planet */}
-               <div className={cn(
-                  "rounded-full flex items-center justify-center transition-[transform,box-shadow] duration-300 hover:scale-[1.3] cursor-pointer shadow-lg",
-                  isBookmarked ? "bg-amber-400" : "bg-indigo-400"
-               )}
-               style={{ 
-                  width: size, 
-                  height: size,
-                  boxShadow: isBookmarked ? '0 0 16px rgba(251, 191, 36, 0.6)' : '0 0 12px rgba(129, 140, 248, 0.4)'
-               }}>
-                  {isBookmarked && <Crown className="w-3 h-3 text-amber-900 absolute opacity-80" />}
-               </div>
+              <ChevronLeft className="w-5 h-5" />
+              <span className="text-sm font-medium">返回全景</span>
+            </button>
+            
+            <div className="relative flex items-center justify-center w-full h-full">
+              {/* Central Star */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center pointer-events-none">
+                <div className={cn(
+                  "w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(129,140,248,0.6)] pointer-events-auto",
+                  focusedNode.bookmarked ? "bg-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.6)]" : "bg-indigo-500"
+                )}>
+                  <MapPin className="w-8 h-8 text-white opacity-80" />
+                </div>
+              </div>
+              
+              {/* Central Text */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-12 sm:mt-14 z-10 flex flex-col items-center pointer-events-none">
+                <div className="text-lg font-bold text-white tracking-widest bg-black/40 px-4 py-1 rounded-full backdrop-blur-sm border border-white/10 whitespace-nowrap">{focusedNode.name}</div>
+                <div className="text-xs text-indigo-200 mt-1.5 tracking-wider bg-black/40 px-3 py-0.5 rounded-full backdrop-blur-sm whitespace-nowrap">{focusedNode.count} 次打卡</div>
+              </div>
 
-               {/* Constant minimalist text */}
-               <div className={cn(
-                  "absolute top-full mt-1.5 text-[10px] whitespace-nowrap pointer-events-none transition-opacity",
-                  isBookmarked ? "text-amber-200/90 font-medium" : "text-slate-300/80"
-               )}>
-                  {node.name}
-                  {node.count > 1 && <span className="ml-1 opacity-70">x{node.count}</span>}
-               </div>
+              {/* Orbiting Satellites */}
+              <div 
+                className="absolute top-1/2 left-1/2 w-0 h-0"
+                style={{ animation: 'spin 120s linear infinite' }}
+              >
+                {focusedNode.records.map((record: any, index: number) => {
+                  const angle = index * 2.39996;
+                  const radius = 120 + Math.pow(index, 0.6) * 25;
+                  const x = Math.cos(angle) * radius;
+                  const y = Math.sin(angle) * radius;
+                  const imgUrl = (record.imageUrls && record.imageUrls[0]) || record.imageUrl;
+                  
+                  return (
+                    <div 
+                      key={record.id || index}
+                      className="absolute group cursor-pointer"
+                      style={{ 
+                        left: x, 
+                        top: y,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      {/* Counter-rotation to keep images/cards upright */}
+                      <div 
+                        style={{ animation: 'spin 120s linear infinite reverse' }}
+                        className="relative"
+                      >
+                         {/* Satellite Body */}
+                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-indigo-400/50 overflow-hidden shadow-[0_0_15px_rgba(99,102,241,0.3)] group-hover:border-indigo-300 group-hover:scale-[1.15] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.6)] transition-all bg-slate-800 z-30 relative">
+                           {imgUrl ? (
+                             <img src={imgUrl} className="w-full h-full object-cover" alt="" />
+                           ) : (
+                             <div className="w-full h-full flex items-center justify-center bg-indigo-900/50">
+                               <MapPin className="w-5 h-5 text-indigo-300" />
+                             </div>
+                           )}
+                         </div>
 
-               {/* Hover Details Card (Glassmorphism) */}
-               <div className="absolute bottom-full mb-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 w-max shadow-2xl">
-                  <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 text-xs flex flex-col gap-1.5 min-w-[120px]">
-                     <div className="text-white font-bold text-sm tracking-wide">{node.name}</div>
-                     <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]" />
-                        <span className="text-slate-300">打卡 <span className="text-white font-mono font-medium">{node.count}</span> 次</span>
-                     </div>
-                     <div className="text-slate-400 text-[10px] mt-1 pt-1.5 border-t border-white/5">
-                        最近: {node.lastDate}
-                     </div>
-                  </div>
-               </div>
+                         {/* Physical bridge and hover card */}
+                         <div className="absolute top-1/2 left-full -translate-y-1/2 pl-3 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto z-[100] transition-all duration-300">
+                           <div 
+                             className="bg-black/80 backdrop-blur-xl rounded-xl p-4 w-56 border border-white/10 shadow-2xl hover:bg-black/90 transition-colors"
+                             onClick={(e) => { e.stopPropagation(); openLightbox(record); }}
+                           >
+                             <div className="text-base font-bold text-white mb-1 line-clamp-2 leading-tight">{record.title || record.location}</div>
+                             <div className="flex items-center gap-2 mb-2">
+                               <div className="font-mono text-xs text-indigo-300 bg-indigo-900/50 px-2 py-0.5 rounded border border-indigo-500/30">{record.date}</div>
+                             </div>
+                             {imgUrl && (
+                               <div className="text-xs text-indigo-400 flex items-center gap-1.5 pt-2 border-t border-white/10 mt-1">
+                                 <Images className="w-3.5 h-3.5" /> 点击回溯记忆
+                               </div>
+                             )}
+                           </div>
+                         </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
+          </>
+        )}
       </div>
     </div>
   );

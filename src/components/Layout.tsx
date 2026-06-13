@@ -82,8 +82,8 @@ export function Layout() {
           isCollapsed ? "md:ml-20" : "md:ml-64"
         )}
       >
-        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-12 pt-8">
-          <div className="max-w-5xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-24 md:pb-12 pt-8">
+          <div className={cn("mx-auto w-full transition-all duration-300", location.pathname === '/travels' ? "max-w-full 2xl:max-w-screen-3xl" : "max-w-5xl")}>
             <OutAnimatedWrapper />
           </div>
         </div>

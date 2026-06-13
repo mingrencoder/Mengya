@@ -58,6 +58,31 @@ export class BackupService {
   private static task: ScheduledTask | null = null;
   private static backupsDir = path.resolve(process.cwd(), 'backups');
 
+  public static listBackups() {
+    if (!fs.existsSync(this.backupsDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(this.backupsDir)
+      .filter(f => f.startsWith('backup-') && f.endsWith('.zip'))
+      .map(f => {
+        const stats = fs.statSync(path.join(this.backupsDir, f));
+        return {
+          filename: f,
+          size: stats.size,
+          time: stats.mtime.getTime()
+        };
+      })
+      .sort((a, b) => b.time - a.time);
+    return files;
+  }
+
+  public static getBackupPath(filename: string): string | null {
+    if (!filename.match(/^backup-.*\.zip$/)) return null;
+    const filepath = path.join(this.backupsDir, filename);
+    if (!fs.existsSync(filepath)) return null;
+    return filepath;
+  }
+
   public static initialize() {
     if (!fs.existsSync(this.backupsDir)) {
       fs.mkdirSync(this.backupsDir, { recursive: true });
