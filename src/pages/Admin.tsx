@@ -1329,6 +1329,8 @@ function TravelAdder({ token }: { token: string }) {
   // Batch edit state
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
   const [batchTagsStr, setBatchTagsStr] = useState('');
+  const [batchExternalLink, setBatchExternalLink] = useState('');
+  const [batchExternalLinkText, setBatchExternalLinkText] = useState('');
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
 
@@ -1802,6 +1804,43 @@ function TravelAdder({ token }: { token: string }) {
                       追加标签
                     </button>
                   </div>
+                  <div className="flex items-center gap-2 pr-3 border-r border-indigo-500/30">
+                    <input
+                      placeholder="批量跳转链接"
+                      value={batchExternalLink}
+                      onChange={(e) => setBatchExternalLink(e.target.value)}
+                      className="w-[120px] bg-black/20 border border-indigo-500/30 rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-400 text-indigo-100"
+                    />
+                    <input
+                      placeholder="批量链接文本"
+                      value={batchExternalLinkText}
+                      onChange={(e) => setBatchExternalLinkText(e.target.value)}
+                      className="w-[100px] bg-black/20 border border-indigo-500/30 rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-400 text-indigo-100"
+                    />
+                    <button
+                      type="button"
+                      disabled={batchLoading || !updateTravel || !batchExternalLink.trim()}
+                      onClick={async () => {
+                        if (!updateTravel || !batchExternalLink.trim()) return;
+                        setBatchLoading(true);
+                        for (const id of selectedForBatch) {
+                          await updateTravel(id, { 
+                            externalLink: batchExternalLink.trim(),
+                            externalLinkText: batchExternalLinkText.trim()
+                          });
+                        }
+                        setBatchExternalLink('');
+                        setBatchExternalLinkText('');
+                        setSelectedForBatch([]);
+                        setBatchLoading(false);
+                        showMessage("批量外链更新成功", false, () => window.location.reload());
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                    >
+                      {batchLoading && <Loader2 className="w-3 h-3 animate-spin"/>}
+                      设置外链
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1816,7 +1855,12 @@ function TravelAdder({ token }: { token: string }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setSelectedForBatch([]); setBatchTagsStr(''); }}
+                      onClick={() => { 
+                        setSelectedForBatch([]); 
+                        setBatchTagsStr(''); 
+                        setBatchExternalLink('');
+                        setBatchExternalLinkText('');
+                      }}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 transition-colors whitespace-nowrap"
                     >
                       取消
