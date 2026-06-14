@@ -25,6 +25,8 @@ export interface TravelData {
   description?: string;
   tags?: string[];
   bookmarked?: boolean;
+  externalLink?: string;
+  externalLinkText?: string;
 }
 
 export interface BookmarkData {

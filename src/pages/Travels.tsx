@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useData } from '../lib/DataContext';
-import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star, Lock, Eye, EyeOff, Sparkles, Crown } from 'lucide-react';
+import { MapPin, X, ChevronLeft, ChevronRight, Search, Calendar, Filter, ArrowDownWideNarrow, ArrowUpNarrowWide, LayoutGrid, List, Images, BookOpen, Tag, Star, Lock, Eye, EyeOff, Sparkles, Crown, ExternalLink } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -13,6 +13,7 @@ import 'swiper/css/free-mode';
 export function Travels() {
   const { data, loading, refresh } = useData();
   const [selectedTravel, setSelectedTravel] = useState<any>(null);
+  const [selectedDescription, setSelectedDescription] = useState<any>(null);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
@@ -874,10 +875,29 @@ export function Travels() {
                               {travel.title || travel.location}
                             </h3>
                             
-                            {travel.description && (
-                              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-3 md:line-clamp-none">
-                                {travel.description}
-                              </p>
+                            {(travel.description || travel.externalLink) && (
+                              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                                {travel.description && (
+                                  <button
+                                    onClick={() => setSelectedDescription(travel)}
+                                    className="w-fit px-2.5 py-1.5 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-medium rounded-lg transition-all text-[11px] flex items-center gap-1.5"
+                                  >
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                    <span>详情描述</span>
+                                  </button>
+                                )}
+                                {travel.externalLink && (
+                                  <a 
+                                    href={travel.externalLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-fit px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 shadow-sm border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-medium rounded-lg transition-all text-[11px] flex items-center gap-1.5"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>{travel.externalLinkText || '查看详情'}</span>
+                                  </a>
+                                )}
+                              </div>
                             )}
                             
                             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-white/5">
@@ -959,14 +979,35 @@ export function Travels() {
                       <h3 className="text-base font-bold text-slate-900 dark:text-white line-clamp-1" title={travel.title || travel.location}>{travel.title || travel.location}</h3>
                       {travel.bookmarked && <Star className="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5 fill-yellow-500" />}
                     </div>
-                    {travel.description && (
-                      <p className="text-xs text-slate-400 leading-relaxed line-clamp-2" title={travel.description}>
-                        {travel.description}
-                      </p>
-                    )}
                   </div>
-                  <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-2">
-                    <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-bold w-fit bg-indigo-500/10 px-1.5 py-1 rounded-md max-w-full" title={travel.location}>
+                  
+                  {(travel.description || travel.externalLink) && (
+                    <div className="mt-2 flex flex-row flex-wrap items-center gap-1.5 px-1">
+                      {travel.description && (
+                        <button
+                          onClick={() => setSelectedDescription(travel)}
+                          className="flex-1 text-center px-1.5 py-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 rounded-md text-[10px] font-medium transition-colors flex items-center justify-center gap-1 border border-slate-200 dark:border-white/10"
+                        >
+                          <BookOpen className="w-2.5 h-2.5 flex-shrink-0" />
+                          <span className="truncate">详情</span>
+                        </button>
+                      )}
+                      {travel.externalLink && (
+                        <a 
+                          href={travel.externalLink} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex-1 text-center px-1.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-md text-[10px] font-medium transition-colors flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-500/30"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                          <span className="truncate">{travel.externalLinkText || '链接'}</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-auto pt-3 border-t border-white/5 flex flex-col gap-2">
+                    <div className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-indigo-400 font-bold w-fit bg-indigo-500/10 px-1.5 py-1 rounded-md max-w-full" title={travel.location}>
                       <MapPin className="w-3 h-3 flex-shrink-0" />
                       <span className="truncate">{travel.location}</span>
                     </div>
@@ -989,12 +1030,12 @@ export function Travels() {
 
           {viewMode === 'gallery' && (
             <div 
-              className="flex flex-col items-center py-10 mt-8 min-h-[600px] overflow-hidden select-none outline-none target-gallery no-tap-highlight"
+              className="flex flex-col items-center py-4 mt-2 min-h-[460px] overflow-hidden select-none outline-none target-gallery no-tap-highlight"
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              <div className="relative w-full max-w-5xl h-[450px] md:h-[500px] flex items-center justify-center pointer-events-none" style={{ perspective: '1200px' }}>
+              <div className="relative w-full max-w-5xl h-[340px] md:h-[400px] flex items-center justify-center pointer-events-none" style={{ perspective: '1200px' }}>
                 {paginatedTravels.map((travel, index) => {
                   const offset = index - coverFlowIndex;
                   const absOffset = Math.abs(offset);
@@ -1084,25 +1125,39 @@ export function Travels() {
                  </div>
                  
                  <AnimatePresence mode="wait">
-                   {paginatedTravels[coverFlowIndex]?.description && (
-                     <motion.p 
+                   {(paginatedTravels[coverFlowIndex]?.description || paginatedTravels[coverFlowIndex]?.externalLink) && (
+                     <motion.div 
                        key={`desc-${paginatedTravels[coverFlowIndex]?.id}`}
                        initial={{ opacity: 0, y: 5 }}
                        animate={{ opacity: 1, y: 0 }}
                        exit={{ opacity: 0, y: -5 }}
-                       className="text-slate-600 dark:text-slate-400 text-center leading-relaxed text-sm md:text-base mt-2"
+                       className="w-full flex flex-col items-center justify-center mt-2 mx-auto max-w-sm"
                      >
-                        {paginatedTravels[coverFlowIndex].description}
-                     </motion.p>
+                       <div className="flex flex-row flex-wrap items-center justify-center gap-1.5">
+                         {paginatedTravels[coverFlowIndex].description && (
+                           <button
+                             onClick={() => setSelectedDescription(paginatedTravels[coverFlowIndex])}
+                             className="px-2.5 py-1 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-medium rounded-lg transition-all text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                           >
+                             <BookOpen className="w-3 h-3 flex-shrink-0" />
+                             <span>详情描述</span>
+                           </button>
+                         )}
+                         {paginatedTravels[coverFlowIndex].externalLink && (
+                           <a 
+                             href={paginatedTravels[coverFlowIndex].externalLink} 
+                             target="_blank" 
+                             rel="noreferrer" 
+                             className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-medium rounded-lg transition-all text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                           >
+                             <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                             <span>{paginatedTravels[coverFlowIndex].externalLinkText || '外链跳转'}</span>
+                           </a>
+                         )}
+                       </div>
+                     </motion.div>
                    )}
                  </AnimatePresence>
-                 
-                 <button 
-                   onClick={() => openLightbox(paginatedTravels[coverFlowIndex])}
-                   className="mt-2 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-400 dark:hover:text-indigo-300 transition-colors underline underline-offset-4"
-                 >
-                   全屏查看当前记录
-                 </button>
               </div>
             </div>
           )}
@@ -1130,10 +1185,29 @@ export function Travels() {
                                  </span>
                               </div>
                             </div>
-                            {travel.description && (
-                              <p className="text-slate-600 dark:text-slate-400 leading-relaxed md:leading-[1.8] text-base md:text-lg whitespace-pre-line mt-2">
-                                {travel.description}
-                              </p>
+                            {(travel.description || travel.externalLink) && (
+                              <div className="mt-4 flex flex-wrap gap-2 items-center">
+                                {travel.description && (
+                                  <button
+                                    onClick={() => setSelectedDescription(travel)}
+                                    className="px-3 py-1.5 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 font-medium rounded-lg transition-all text-[11px] flex items-center gap-1.5 border border-slate-200 dark:border-white/10 shadow-sm"
+                                  >
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                    <span>阅读详情说明</span>
+                                  </button>
+                                )}
+                                {travel.externalLink && (
+                                  <a 
+                                    href={travel.externalLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-medium rounded-lg transition-all text-[11px] flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-500/20 shadow-sm"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>{travel.externalLinkText || '查看外链'}</span>
+                                  </a>
+                                )}
+                              </div>
                             )}
                          </div>
 
@@ -1184,7 +1258,7 @@ export function Travels() {
           )}
 
           {viewMode !== 'matrix' && totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-8">
+            <div className={cn("flex flex-col sm:flex-row justify-center items-center gap-4", viewMode === 'gallery' ? "mt-2 md:mt-4" : "mt-8")}>
               <div className="flex justify-center items-center gap-2">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
@@ -1245,7 +1319,7 @@ export function Travels() {
           )}
           
           {viewMode !== 'matrix' && totalPages <= 1 && filteredTravels.length > 0 && (
-            <div className="flex justify-center items-center mt-8">
+            <div className={cn("flex justify-center items-center", viewMode === 'gallery' ? "mt-2 md:mt-4" : "mt-8")}>
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-white/5 border border-slate-200 dark:border-white/10 rounded-full px-3 py-1.5">
                 <span>每页显示</span>
                 <input
@@ -1321,6 +1395,74 @@ export function Travels() {
                 />
               </AnimatePresence>
             </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Description Modal using Portal */}
+      {createPortal(
+        <AnimatePresence>
+          {selectedDescription && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6" style={{ perspective: '1000px' }}>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedDescription(null)}
+                className="absolute inset-0 bg-[#0a0a0a]/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10, rotateX: 5 }}
+                animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10, rotateX: -5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="relative w-full max-w-2xl bg-white/70 dark:bg-[#0a0a0a]/80 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+              >
+                <div className="flex items-center justify-between p-6 sm:p-8 border-b border-slate-200/50 dark:border-white/5">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                      {selectedDescription.title || selectedDescription.location}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs font-mono text-indigo-500 dark:text-indigo-400 mt-1">
+                      <span>{selectedDescription.date}</span>
+                      <span className="w-1 h-1 rounded-full bg-indigo-500/50"></span>
+                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{selectedDescription.location}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedDescription(null)}
+                    className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors flex-shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-6 sm:p-8 overflow-y-auto overscroll-contain custom-scrollbar">
+                  <p className="text-slate-700 dark:text-slate-300 leading-[1.8] text-base whitespace-pre-wrap">
+                    {selectedDescription.description}
+                  </p>
+                </div>
+                <div className="p-4 sm:p-6 border-t border-slate-200/50 dark:border-white/5 flex flex-wrap items-center justify-end gap-3 bg-slate-50/50 dark:bg-white/[0.02]">
+                  <button
+                    onClick={() => setSelectedDescription(null)}
+                    className="px-6 py-2.5 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 font-medium rounded-xl transition-all text-sm border border-slate-200 dark:border-white/10 shadow-sm"
+                  >
+                    确定
+                  </button>
+                  {selectedDescription.externalLink && (
+                    <a 
+                      href={selectedDescription.externalLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 shadow-sm shadow-indigo-500/20 border border-indigo-500/50 text-white font-medium rounded-xl transition-all text-sm flex items-center gap-2"
+                    >
+                      <span>{selectedDescription.externalLinkText || '查看完整来源'}</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>,
         document.body

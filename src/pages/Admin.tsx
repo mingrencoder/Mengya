@@ -1307,7 +1307,7 @@ function TravelAdder({ token }: { token: string }) {
   const { data, addTravel, updateTravel, deleteTravel } = useData();
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: '', location: '', date: '', description: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
+  const [form, setForm] = useState({ title: '', location: '', date: '', description: '', externalLink: '', externalLinkText: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
   const [files, setFiles] = useState<File[]>([]);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -1444,6 +1444,8 @@ function TravelAdder({ token }: { token: string }) {
       location: travel.location || '',
       date: travel.date || '',
       description: travel.description || '',
+      externalLink: travel.externalLink || '',
+      externalLinkText: travel.externalLinkText || '',
       coverImageIndex: travel.coverImageIndex || 0,
       tagsStr: travel.tags ? travel.tags.join(', ') : '',
       bookmarked: travel.bookmarked || false,
@@ -1454,7 +1456,7 @@ function TravelAdder({ token }: { token: string }) {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setForm({ title: '', location: '', date: '', description: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
+    setForm({ title: '', location: '', date: '', description: '', externalLink: '', externalLinkText: '', coverImageIndex: 0, tagsStr: '', bookmarked: false });
     setFiles([]);
     setExistingImageUrls([]);
   };
@@ -1542,6 +1544,8 @@ function TravelAdder({ token }: { token: string }) {
         location: form.location,
         date: form.date,
         description: form.description,
+        externalLink: form.externalLink,
+        externalLinkText: form.externalLinkText,
         coverImageIndex: form.coverImageIndex,
         tags: form.tagsStr.split(',').map(s => s.trim()).filter(Boolean),
         bookmarked: form.bookmarked,
@@ -1621,6 +1625,21 @@ function TravelAdder({ token }: { token: string }) {
           rows={2}
           className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm resize-none"
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <input
+            placeholder="输入外链地址，例如 https://..."
+            value={form.externalLink}
+            onChange={(e) => setForm({ ...form, externalLink: e.target.value })}
+            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+          />
+          <input
+            placeholder="按钮显示文字，选填，默认为&quot;查看详情&quot;"
+            value={form.externalLinkText}
+            onChange={(e) => setForm({ ...form, externalLinkText: e.target.value })}
+            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+          />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
           <input
