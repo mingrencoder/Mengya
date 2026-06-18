@@ -414,7 +414,13 @@ function DataExportImport({ token }: { token: string }) {
 
   // Conflict Resolution States
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
-  const [conflictData, setConflictData] = useState<{tempDirId: string, localOnlyCount: number} | null>(null);
+  const [conflictData, setConflictData] = useState<{tempDirId: string, localOnlyCount: number, details?: { travels: number, bookmarks: number, categories: number, events: number }} | null>(null);
+  const [conflictStrategies, setConflictStrategies] = useState<{ travels: 'merge' | 'replace', bookmarks: 'merge' | 'replace', categories: 'merge' | 'replace', events: 'merge' | 'replace' }>({
+    travels: 'merge',
+    bookmarks: 'merge',
+    categories: 'merge',
+    events: 'merge'
+  });
 
   // Backup Settings Form State
   const [backupSettings, setBackupSettings] = useState(() => data?.backupSettings || { enabled: false, frequency: 'daily', dayOfWeek: 1, time: '02:00', retentionCount: 1 });
@@ -429,7 +435,7 @@ function DataExportImport({ token }: { token: string }) {
     setModalOpen(true);
   };
 
-  const executeConflictResolution = async (strategy: 'merge' | 'replace') => {
+  const executeConflictResolution = async (strategy: 'merge' | 'replace' | Record<string, 'merge' | 'replace'>) => {
     if (!conflictData) return;
     setImporting(true);
     setImportProgress('处理中...');
@@ -583,7 +589,11 @@ function DataExportImport({ token }: { token: string }) {
       });
       
       if (result.status === 'conflict') {
-        setConflictData({ tempDirId: result.tempDirId, localOnlyCount: result.localOnlyCount });
+        setConflictData({ 
+          tempDirId: result.tempDirId, 
+          localOnlyCount: result.localOnlyCount,
+          details: result.details 
+        });
         setConflictModalOpen(true);
         // We do not set Importing to false here, so the loader remains hidden until resolution
       } else {
@@ -623,7 +633,11 @@ function DataExportImport({ token }: { token: string }) {
 
       const result = await res.json();
       if (result.status === 'conflict') {
-        setConflictData({ tempDirId: result.tempDirId, localOnlyCount: result.localOnlyCount });
+        setConflictData({ 
+          tempDirId: result.tempDirId, 
+          localOnlyCount: result.localOnlyCount,
+          details: result.details 
+        });
         setConflictModalOpen(true);
       } else {
         await refresh();
@@ -902,16 +916,63 @@ function DataExportImport({ token }: { token: string }) {
                   </div>
                   <h3 className="text-xl font-bold dark:text-white pb-2">发现冲突数据</h3>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    发现本地有 <strong className="text-indigo-500">{conflictData.localOnlyCount}</strong> 条记录不在导入包中。您希望如何处理？
+                    发现本地有 <strong className="text-indigo-500">{conflictData.localOnlyCount}</strong> 条记录不在导入包中。
                   </p>
-                  <div className="flex flex-col gap-3 mt-4">
-                    <button onClick={() => executeConflictResolution('merge')} className="bg-indigo-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-indigo-600 transition-colors text-sm">
-                      合并保留 (推荐)
+                  
+                  {conflictData.details && (
+                    <div className="bg-slate-50 dark:bg-black/20 rounded-xl p-4 text-left text-sm text-slate-600 dark:text-slate-300 space-y-3 mt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-white/50">旅行记录：<span className="font-medium text-slate-700 dark:text-white ml-1">{conflictData.details.travels} 项</span></span>
+                        <select 
+                          className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-md px-2 py-1 text-xs outline-none"
+                          value={conflictStrategies.travels}
+                          onChange={(e) => setConflictStrategies(prev => ({ ...prev, travels: e.target.value as 'merge' | 'replace' }))}
+                        >
+                          <option value="merge">合并保留</option>
+                          <option value="replace">直接覆盖</option>
+                        </select>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-white/50">珍藏书签：<span className="font-medium text-slate-700 dark:text-white ml-1">{conflictData.details.bookmarks} 项</span></span>
+                        <select 
+                          className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-md px-2 py-1 text-xs outline-none"
+                          value={conflictStrategies.bookmarks}
+                          onChange={(e) => setConflictStrategies(prev => ({ ...prev, bookmarks: e.target.value as 'merge' | 'replace' }))}
+                        >
+                          <option value="merge">合并保留</option>
+                          <option value="replace">直接覆盖</option>
+                        </select>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-white/50">纪元分类：<span className="font-medium text-slate-700 dark:text-white ml-1">{conflictData.details.categories} 项</span></span>
+                        <select 
+                          className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-md px-2 py-1 text-xs outline-none"
+                          value={conflictStrategies.categories}
+                          onChange={(e) => setConflictStrategies(prev => ({ ...prev, categories: e.target.value as 'merge' | 'replace' }))}
+                        >
+                          <option value="merge">合并保留</option>
+                          <option value="replace">直接覆盖</option>
+                        </select>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-white/50">时光纪元：<span className="font-medium text-slate-700 dark:text-white ml-1">{conflictData.details.events} 项</span></span>
+                        <select 
+                          className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-md px-2 py-1 text-xs outline-none"
+                          value={conflictStrategies.events}
+                          onChange={(e) => setConflictStrategies(prev => ({ ...prev, events: e.target.value as 'merge' | 'replace' }))}
+                        >
+                          <option value="merge">合并保留</option>
+                          <option value="replace">直接覆盖</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3 mt-4 pt-2">
+                    <button onClick={() => executeConflictResolution(conflictStrategies)} className="bg-indigo-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-indigo-600 transition-colors text-sm">
+                      确认执行
                     </button>
-                    <button onClick={() => executeConflictResolution('replace')} className="bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white px-4 py-3 rounded-xl font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-sm">
-                      仅保留导入数据 
-                    </button>
-                    <button onClick={cancelConflictResolution} className="mt-2 text-slate-500 hover:text-slate-700 dark:hover:text-white/80 transition-colors text-sm font-medium">
+                    <button onClick={cancelConflictResolution} className="text-slate-500 hover:text-slate-700 dark:hover:text-white/80 transition-colors text-sm font-medium">
                       取消导入
                     </button>
                   </div>

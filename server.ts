@@ -504,7 +504,7 @@ function getImportData<T>(filePath: string): T | null {
   }
 }
 
-async function performImport(extractDir: string, strategy: 'merge' | 'replace') {
+async function performImport(extractDir: string, strategy: 'merge' | 'replace' | Record<string, 'merge' | 'replace'>) {
   const tempTravelsDir = path.join(extractDir, 'data', 'travels');
   let importedTravels: any[] = [];
   if (fs.existsSync(tempTravelsDir)) {
@@ -561,26 +561,42 @@ async function performImport(extractDir: string, strategy: 'merge' | 'replace') 
   let finalEpochCats: any[] = [];
   let finalEpochEvents: any[] = [];
 
-  if (strategy === 'merge') {
+  const getStrategy = (type: string) => {
+    if (typeof strategy === 'object') {
+      return strategy[type] || 'merge';
+    }
+    return strategy;
+  };
+
+  if (getStrategy('travels') === 'merge') {
     const importedTravelIds = new Set(importedTravels.map(t => t.id));
     const localOnlyTravels = localTravels.filter(t => !importedTravelIds.has(t.id));
     finalTravels = [...localOnlyTravels, ...importedTravels];
+  } else {
+    finalTravels = importedTravels;
+  }
 
+  if (getStrategy('bookmarks') === 'merge') {
     const importedBookmarkIds = new Set(importedBookmarks.map(b => b.id));
     const localOnlyBookmarks = localBookmarks.filter(b => !importedBookmarkIds.has(b.id));
     finalBookmarks = [...localOnlyBookmarks, ...importedBookmarks];
+  } else {
+    finalBookmarks = importedBookmarks;
+  }
 
+  if (getStrategy('categories') === 'merge') {
     const importedCatIds = new Set(importedEpochCategories.map(c => c.id));
     const localOnlyCats = localEpochCats.filter(c => !importedCatIds.has(c.id));
     finalEpochCats = [...localOnlyCats, ...importedEpochCategories];
+  } else {
+    finalEpochCats = importedEpochCategories.length > 0 ? importedEpochCategories : localEpochCats;
+  }
 
+  if (getStrategy('events') === 'merge') {
     const importedEventIds = new Set(importedEpochEvents.map(e => e.id));
     const localOnlyEvents = localEpochEvents.filter(e => !importedEventIds.has(e.id));
     finalEpochEvents = [...localOnlyEvents, ...importedEpochEvents];
   } else {
-    finalTravels = importedTravels;
-    finalBookmarks = importedBookmarks;
-    finalEpochCats = importedEpochCategories.length > 0 ? importedEpochCategories : localEpochCats; // keep defaults if none
     finalEpochEvents = importedEpochEvents;
   }
 
@@ -689,12 +705,66 @@ app.post('/api/data/import/analyze', authenticateToken, upload.single('file'), a
       }
     }
 
+    const tempBookmarksDir = path.join(extractDir, 'data', 'bookmarks');
+    let importedBookmarks: any[] = [];
+    if (fs.existsSync(tempBookmarksDir)) {
+      const chunks = fs.readdirSync(tempBookmarksDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempBookmarksDir, chunk)) || [];
+        if (Array.isArray(data)) importedBookmarks = importedBookmarks.concat(data);
+      }
+    }
+
+    const tempEpochCatDir = path.join(extractDir, 'data', 'epochCategories');
+    let importedEpochCategories: any[] = [];
+    if (fs.existsSync(tempEpochCatDir)) {
+      const chunks = fs.readdirSync(tempEpochCatDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempEpochCatDir, chunk)) || [];
+        if (Array.isArray(data)) importedEpochCategories = importedEpochCategories.concat(data);
+      }
+    }
+
+    const tempEpochEventDir = path.join(extractDir, 'data', 'epochEvents');
+    let importedEpochEvents: any[] = [];
+    if (fs.existsSync(tempEpochEventDir)) {
+      const chunks = fs.readdirSync(tempEpochEventDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempEpochEventDir, chunk)) || [];
+        if (Array.isArray(data)) importedEpochEvents = importedEpochEvents.concat(data);
+      }
+    }
+
     const localTravels = services.travels.readAll();
     const importedTravelIds = new Set(importedTravels.map(t => t.id));
-    const localOnlyCount = localTravels.filter(t => !importedTravelIds.has(t.id)).length;
+    const localOnlyTravelsCount = localTravels.filter(t => !importedTravelIds.has(t.id)).length;
+
+    const localBookmarks = services.bookmarks.readAll();
+    const importedBookmarkIds = new Set(importedBookmarks.map(b => b.id));
+    const localOnlyBookmarksCount = localBookmarks.filter(b => !importedBookmarkIds.has(b.id)).length;
+
+    const localEpochCats = services.epochCategories.readAll();
+    const importedCatIds = new Set(importedEpochCategories.map(c => c.id));
+    const localOnlyCatsCount = localEpochCats.filter(c => !importedCatIds.has(c.id)).length;
+
+    const localEpochEvents = services.epochEvents.readAll();
+    const importedEventIds = new Set(importedEpochEvents.map(e => e.id));
+    const localOnlyEventsCount = localEpochEvents.filter(e => !importedEventIds.has(e.id)).length;
+
+    const localOnlyCount = localOnlyTravelsCount + localOnlyBookmarksCount + localOnlyCatsCount + localOnlyEventsCount;
 
     if (localOnlyCount > 0) {
-      return res.json({ status: 'conflict', tempDirId, localOnlyCount });
+      return res.json({ 
+        status: 'conflict', 
+        tempDirId, 
+        localOnlyCount,
+        details: {
+          travels: localOnlyTravelsCount,
+          bookmarks: localOnlyBookmarksCount,
+          categories: localOnlyCatsCount,
+          events: localOnlyEventsCount
+        }
+      });
     }
 
     // No conflict, merge directly (replace/merge is equivalent here as localOnlyCount is 0)
@@ -735,12 +805,66 @@ app.post('/api/data/import/analyze_backup', authenticateToken, async (req, res) 
       }
     }
 
+    const tempBookmarksDir = path.join(extractDir, 'data', 'bookmarks');
+    let importedBookmarks: any[] = [];
+    if (fs.existsSync(tempBookmarksDir)) {
+      const chunks = fs.readdirSync(tempBookmarksDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempBookmarksDir, chunk)) || [];
+        if (Array.isArray(data)) importedBookmarks = importedBookmarks.concat(data);
+      }
+    }
+
+    const tempEpochCatDir = path.join(extractDir, 'data', 'epochCategories');
+    let importedEpochCategories: any[] = [];
+    if (fs.existsSync(tempEpochCatDir)) {
+      const chunks = fs.readdirSync(tempEpochCatDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempEpochCatDir, chunk)) || [];
+        if (Array.isArray(data)) importedEpochCategories = importedEpochCategories.concat(data);
+      }
+    }
+
+    const tempEpochEventDir = path.join(extractDir, 'data', 'epochEvents');
+    let importedEpochEvents: any[] = [];
+    if (fs.existsSync(tempEpochEventDir)) {
+      const chunks = fs.readdirSync(tempEpochEventDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+      for (const chunk of chunks) {
+        const data = getImportData<any[]>(path.join(tempEpochEventDir, chunk)) || [];
+        if (Array.isArray(data)) importedEpochEvents = importedEpochEvents.concat(data);
+      }
+    }
+
     const localTravels = services.travels.readAll();
     const importedTravelIds = new Set(importedTravels.map(t => t.id));
-    const localOnlyCount = localTravels.filter(t => !importedTravelIds.has(t.id)).length;
+    const localOnlyTravelsCount = localTravels.filter(t => !importedTravelIds.has(t.id)).length;
+
+    const localBookmarks = services.bookmarks.readAll();
+    const importedBookmarkIds = new Set(importedBookmarks.map(b => b.id));
+    const localOnlyBookmarksCount = localBookmarks.filter(b => !importedBookmarkIds.has(b.id)).length;
+
+    const localEpochCats = services.epochCategories.readAll();
+    const importedCatIds = new Set(importedEpochCategories.map(c => c.id));
+    const localOnlyCatsCount = localEpochCats.filter(c => !importedCatIds.has(c.id)).length;
+
+    const localEpochEvents = services.epochEvents.readAll();
+    const importedEventIds = new Set(importedEpochEvents.map(e => e.id));
+    const localOnlyEventsCount = localEpochEvents.filter(e => !importedEventIds.has(e.id)).length;
+
+    const localOnlyCount = localOnlyTravelsCount + localOnlyBookmarksCount + localOnlyCatsCount + localOnlyEventsCount;
 
     if (localOnlyCount > 0) {
-      return res.json({ status: 'conflict', tempDirId, localOnlyCount });
+      return res.json({ 
+        status: 'conflict', 
+        tempDirId, 
+        localOnlyCount,
+        details: {
+          travels: localOnlyTravelsCount,
+          bookmarks: localOnlyBookmarksCount,
+          categories: localOnlyCatsCount,
+          events: localOnlyEventsCount
+        }
+      });
     }
 
     await performImport(extractDir, 'merge');
@@ -754,7 +878,7 @@ app.post('/api/data/import/analyze_backup', authenticateToken, async (req, res) 
 app.post('/api/data/import/execute', authenticateToken, async (req, res) => {
   try {
     const { tempDirId, strategy } = req.body;
-    if (!tempDirId || !['merge', 'replace'].includes(strategy)) {
+    if (!tempDirId || !strategy) {
       return res.status(400).json({ error: 'Invalid parameters' });
     }
     const extractDir = path.resolve(process.cwd(), tempDirId);
