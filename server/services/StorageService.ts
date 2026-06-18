@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { HomeData, TravelData, BookmarkData, EpochCategory, EpochEvent } from '../../src/types';
+import { HomeData, TravelData, BookmarkData, BookmarkCategory, EpochCategory, EpochEvent } from '../../src/types';
 
 dotenv.config();
 
@@ -231,6 +231,7 @@ export const services = {
   }),
   travels: new CollectionService<TravelData>('travels'),
   bookmarks: new CollectionService<BookmarkData>('bookmarks'),
+  bookmarkCategories: new CollectionService<BookmarkCategory>('bookmarkCategories'),
   epochCategories: new CollectionService<EpochCategory>('epochCategories'),
   epochEvents: new CollectionService<EpochEvent>('epochEvents')
 };
@@ -239,4 +240,11 @@ export const services = {
 if (services.epochCategories.readAll().length === 0) {
   services.epochCategories.add({ id: 'life', name: '里程碑', color: '#6366f1' });
   services.epochCategories.add({ id: 'travel', name: '家庭旅行', color: '#fbbf24' });
+}
+
+// Initialize default bookmark categories if none exist
+if (services.bookmarkCategories.readAll().length === 0) {
+  services.bookmarkCategories.add({ id: 'general', name: '常用' });
+  services.bookmarkCategories.add({ id: 'tools', name: '工具' });
+  services.bookmarkCategories.add({ id: 'inspiration', name: '灵感' });
 }

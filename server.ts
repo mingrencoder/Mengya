@@ -94,6 +94,7 @@ app.get('/api/data', (req, res) => {
       home: services.home.read(),
       travels: isTravelAuthorized ? services.travels.readAll() : [],
       isTravelAuthorized,
+      bookmarkCategories: services.bookmarkCategories.readAll(),
       bookmarks: services.bookmarks.readAll(),
       epochCategories: isTravelAuthorized ? services.epochCategories.readAll() : [],
       epochEvents: isTravelAuthorized ? services.epochEvents.readAll() : []
@@ -278,12 +279,23 @@ app.put('/api/data/travels/:id', authenticateToken, (req, res) => {
 // Bookmarks
 app.post('/api/data/bookmarks', authenticateToken, (req, res) => {
   try {
+    const list = services.bookmarks.readAll();
     const newBookmark = {
       id: Date.now().toString(),
+      order: list.length, // default place at the end
       ...req.body
     };
     services.bookmarks.add(newBookmark);
     res.json(newBookmark);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+app.put('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
+  try {
+    const updated = services.bookmarks.update(req.params.id, req.body);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed' });
   }
@@ -294,6 +306,63 @@ app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
     services.bookmarks.delete(req.params.id);
     res.json({ success: true });
   } catch (error) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+app.put('/api/data/bookmarks-reorder', authenticateToken, (req, res) => {
+  try {
+    const list = services.bookmarks.readAll();
+    const updates = req.body as {id: string, order: number}[];
+    updates.forEach(u => {
+      const item = list.find(b => b.id === u.id);
+      if (item) item.order = u.order;
+    });
+    // Sort logic
+    list.sort((a, b) => (a.order || 0) - (b.order || 0));
+    services.bookmarks.writeAll(list);
+    res.json(list);
+  } catch(e) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// Bookmark Categories
+app.post('/api/data/bookmark-categories', authenticateToken, (req, res) => {
+  try {
+    const list = services.bookmarkCategories.readAll();
+    const newCategory = { id: Date.now().toString(), order: list.length, ...req.body };
+    services.bookmarkCategories.add(newCategory);
+    res.json(newCategory);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/data/bookmark-categories/:id', authenticateToken, (req, res) => {
+  try {
+    const updated = services.bookmarkCategories.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.delete('/api/data/bookmark-categories/:id', authenticateToken, (req, res) => {
+  try {
+    services.bookmarkCategories.delete(req.params.id);
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/data/bookmark-categories-reorder', authenticateToken, (req, res) => {
+  try {
+    const list = services.bookmarkCategories.readAll();
+    const updates = req.body as {id: string, order: number}[];
+    updates.forEach(u => {
+      const item = list.find(c => c.id === u.id);
+      if (item) item.order = u.order;
+    });
+    list.sort((a, b) => (a.order || 0) - (b.order || 0));
+    services.bookmarkCategories.writeAll(list);
+    res.json(list);
+  } catch(e) {
     res.status(500).json({ error: 'Failed' });
   }
 });

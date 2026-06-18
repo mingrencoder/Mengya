@@ -2369,10 +2369,26 @@ function TravelAdder({ token }: { token: string }) {
 }
 
 function BookmarkAdder({ token }: { token: string }) {
-  const { data, addBookmark, deleteBookmark } = useData();
+  const { 
+    data, 
+    addBookmark, 
+    updateBookmark, 
+    deleteBookmark, 
+    reorderBookmarks,
+    addBookmarkCategory,
+    updateBookmarkCategory,
+    deleteBookmarkCategory,
+    reorderBookmarkCategories
+  } = useData();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: '', url: '', description: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: '', url: '', description: '', categoryId: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState('');
 
   // Message Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -2388,18 +2404,50 @@ function BookmarkAdder({ token }: { token: string }) {
     setModalOpen(true);
   };
 
+  const sortedBookmarks = React.useMemo(() => {
+    if (!data?.bookmarks) return [];
+    return [...data.bookmarks].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [data?.bookmarks]);
+
+  const sortedCategories = React.useMemo(() => {
+    if (!data?.bookmarkCategories) return [];
+    return [...data.bookmarkCategories].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [data?.bookmarkCategories]);
+
+  const startEdit = (bm: any) => {
+    setEditingId(bm.id);
+    setForm({
+      title: bm.title || '',
+      url: bm.url || '',
+      description: bm.description || '',
+      categoryId: bm.categoryId || ''
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ title: '', url: '', description: '', categoryId: '' });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const success = await addBookmark(form);
-      if (!success) throw new Error('添加失败，请刷新登录');
-      showMessage('书签添加成功', false, () => {
-        setForm({ title: '', url: '', description: '' });
-        window.location.reload();
-      });
+      if (editingId && updateBookmark) {
+        const success = await updateBookmark(editingId, form);
+        if (!success) throw new Error('更新失败，请重试');
+        showMessage('书签更新成功', false, () => {
+          cancelEdit();
+        });
+      } else {
+        const success = await addBookmark(form);
+        if (!success) throw new Error('添加失败，请重试');
+        showMessage('书签添加成功', false, () => {
+          setForm({ title: '', url: '', description: '', categoryId: '' });
+        });
+      }
     } catch (err: any) {
-      showMessage(err.message || '添加失败', true);
+      showMessage(err.message || '操作失败', true);
     }
     setLoading(false);
   };
@@ -2408,25 +2456,169 @@ function BookmarkAdder({ token }: { token: string }) {
     if (!deleteConfirm) return;
     try {
       const success = await deleteBookmark(deleteConfirm);
-      if (!success) throw new Error('删除失败，请刷新登录');
-      showMessage('书签已删除', false, () => window.location.reload());
+      if (!success) throw new Error('删除失败，请重试');
+      showMessage('书签已删除', false);
+      if (editingId === deleteConfirm) cancelEdit();
     } catch (err: any) {
       showMessage(err.message || '删除失败', true);
     }
     setDeleteConfirm(null);
   };
 
+  const handleDragStart = (e: React.DragEvent, index: number, type: 'bookmark' | 'category') => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ index, type }));
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIndex: number, type: 'bookmark' | 'category') => {
+    e.preventDefault();
+    try {
+      const payload = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (payload.type !== type) return;
+      const sourceIndex = payload.index;
+      if (sourceIndex === targetIndex) return;
+
+      if (type === 'bookmark') {
+        const newArr = [...sortedBookmarks];
+        const [movedItem] = newArr.splice(sourceIndex, 1);
+        newArr.splice(targetIndex, 0, movedItem);
+        const updates = newArr.map((b, i) => ({ id: b.id, order: i }));
+        if (reorderBookmarks) await reorderBookmarks(updates);
+      } else {
+        const newArr = [...sortedCategories];
+        const [movedItem] = newArr.splice(sourceIndex, 1);
+        newArr.splice(targetIndex, 0, movedItem);
+        const updates = newArr.map((c, i) => ({ id: c.id, order: i }));
+        if (reorderBookmarkCategories) await reorderBookmarkCategories(updates);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) return;
+    if (sortedCategories.some(c => c.name === newCatName.trim())) {
+      showMessage('分类名称不能重复', true);
+      return;
+    }
+    const success = await addBookmarkCategory({ name: newCatName.trim() });
+    if (success) {
+      setNewCatName('');
+    } else {
+      showMessage('添加失败', true);
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    if (!editingCatId || !editCatName.trim()) return;
+    if (sortedCategories.some(c => c.name === editCatName.trim() && c.id !== editingCatId)) {
+      showMessage('分类名称不能重复', true);
+      return;
+    }
+    const success = await updateBookmarkCategory(editingCatId, { name: editCatName.trim() });
+    if (success) {
+      setEditingCatId(null);
+    } else {
+      showMessage('修改失败', true);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    const success = await deleteBookmarkCategory(id);
+    if (!success) showMessage('删除失败', true);
+  };
+
   return (
     <section className="glass-panel p-6 md:p-8 rounded-3xl space-y-6">
-      <h2 className="text-xl font-medium">常用收藏管理</h2>
+      <h2 className="text-xl font-medium">{editingId ? '编辑书签' : '常用收藏管理'}</h2>
+      
+      <div className="flex justify-end mb-2">
+        <button
+          type="button"
+          onClick={() => setShowCategoryManager(!showCategoryManager)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+            showCategoryManager 
+              ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+              : "bg-black/20 text-slate-700 dark:text-slate-300 border-white/10 hover:bg-white/10"
+          )}
+        >
+          <Tag className="w-3.5 h-3.5" />
+          {showCategoryManager ? '收起分类管理' : '分类（类型）管理'}
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {showCategoryManager && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-4 mb-4">
+              <h4 className="text-sm font-medium text-white/90">分类管理 (拖动可排序)</h4>
+              <div className="flex items-center gap-2">
+                 <input 
+                   value={newCatName}
+                   onChange={e => setNewCatName(e.target.value)}
+                   onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                   placeholder="新分类名称"
+                   className="flex-1 bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                 />
+                 <button onClick={handleAddCategory} className="bg-indigo-500 text-white px-3 py-2 rounded text-sm hover:bg-indigo-400">添加</button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {sortedCategories.map((c, idx) => (
+                  <div 
+                    key={c.id} 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx, 'category')}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleDrop(e, idx, 'category')}
+                    className="flex items-center gap-3 bg-white/5 p-2 rounded group"
+                  >
+                     <GripVertical className="w-4 h-4 text-white/20 cursor-move hover:text-white/50 shrink-0" />
+                     {editingCatId === c.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <input 
+                            value={editCatName}
+                            onChange={e => setEditCatName(e.target.value)}
+                            className="bg-black/40 border border-white/20 rounded px-2 py-1 text-xs w-full text-white"
+                          />
+                          <button onClick={handleSaveCategory} className="text-xs bg-indigo-500 px-2 py-1 rounded text-white shrink-0">保存</button>
+                          <button onClick={() => setEditingCatId(null)} className="text-xs bg-white/20 px-2 py-1 rounded text-white shrink-0">取消</button>
+                        </div>
+                     ) : (
+                        <>
+                           <span className="text-sm text-white/80 flex-1">{c.name}</span>
+                           <button onClick={() => {setEditingCatId(c.id); setEditCatName(c.name)}} className="text-xs text-indigo-400 hover:text-indigo-300 px-2">改名</button>
+                           <button onClick={() => handleDeleteCategory(c.id)} className="text-white/30 hover:text-red-400 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                        </>
+                     )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          required
-          placeholder="请输入标题"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
-        />
+        <div className="flex gap-4">
+           <input
+             required
+             placeholder="请输入标题"
+             value={form.title}
+             onChange={(e) => setForm({ ...form, title: e.target.value })}
+             className="flex-1 bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
+           />
+           <select 
+             value={form.categoryId}
+             onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+             className="w-1/3 bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm text-white"
+           >
+             <option value="">(无分类)</option>
+             {sortedCategories.map(c => (
+               <option key={c.id} value={c.id}>{c.name}</option>
+             ))}
+           </select>
+        </div>
         <input
           required
           type="url"
@@ -2436,43 +2628,70 @@ function BookmarkAdder({ token }: { token: string }) {
           className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
         />
         <textarea
-          required
-          placeholder="简略描述"
+          placeholder="简略描述（可选）"
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
           rows={2}
           className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm resize-none"
         />
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-white/10 text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-white/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> 添加书签</>}
-        </button>
+        <div className="flex gap-2">
+          {editingId && (
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="px-6 py-2.5 rounded-xl text-sm font-medium bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 transition-colors"
+            >
+              取消
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 bg-white/10 text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-white/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : editingId ? "保存编辑" : <><Plus className="w-4 h-4" /> 添加书签</>}
+          </button>
+        </div>
       </form>
       
-      {data?.bookmarks && data.bookmarks.length > 0 && (
+      {sortedBookmarks.length > 0 && (
         <div className="space-y-3 pt-6 border-t border-white/10">
-          <h3 className="text-sm font-medium text-white/70">已有书签</h3>
-          {data.bookmarks.map(bookmark => (
-            <div key={bookmark.id} className="flex items-center justify-between bg-black/20 border border-white/5 p-3 rounded-xl group/bmk">
-              <div className="flex flex-col truncate pr-4">
-                <span className="text-sm text-white/90 truncate">{bookmark.title}</span>
-                <span className="text-xs text-indigo-400 truncate hover:underline cursor-pointer">{bookmark.url}</span>
+          <h3 className="text-sm font-medium text-white/70">已有书签 (拖拽排序)</h3>
+          {sortedBookmarks.map((bookmark, idx) => {
+            const cat = sortedCategories.find(c => c.id === bookmark.categoryId);
+            return (
+              <div 
+                key={bookmark.id} 
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx, 'bookmark')}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, idx, 'bookmark')}
+                className={cn("flex items-center justify-between border p-3 rounded-xl group/bmk cursor-move transition-colors", editingId === bookmark.id ? "bg-indigo-500/20 border-indigo-500/50" : "bg-black/20 border-white/5 hover:bg-white/5")}
+                onClick={() => editingId === bookmark.id ? cancelEdit() : startEdit(bookmark)}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <GripVertical className="w-4 h-4 text-white/20 group-hover/bmk:text-white/50 shrink-0" />
+                  <div className="flex flex-col truncate pr-4">
+                    <span className="text-sm text-white/90 flex items-center gap-2 truncate">
+                      {bookmark.title}
+                      {cat && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-white/70 border border-white/5">{cat.name}</span>}
+                    </span>
+                    <span className="text-xs text-indigo-400 truncate hover:underline">{bookmark.url}</span>
+                  </div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(bookmark.id); }} className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => setDeleteConfirm(bookmark.id)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-red-400 shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <ConfirmModal
         isOpen={deleteConfirm !== null}
         title="删除书签"
-        message="确定要删除这个书签吗？"
+        message="确定要删除这个书签吗？操作不可逆。"
         onConfirm={confirmDeleteBookmark}
         onCancel={() => setDeleteConfirm(null)}
       />
@@ -2489,3 +2708,4 @@ function BookmarkAdder({ token }: { token: string }) {
     </section>
   );
 }
+

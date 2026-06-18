@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { PlatformData, HomeData, TravelData, BookmarkData, EpochCategory, EpochEvent } from '../types';
+import { PlatformData, HomeData, TravelData, BookmarkData, BookmarkCategory, EpochCategory, EpochEvent } from '../types';
 
 interface DataContextType {
   data: PlatformData | null;
@@ -11,6 +11,14 @@ interface DataContextType {
   updateTravel?: (id: string, travel: Partial<TravelData>) => Promise<boolean>;
   addBookmark: (bookmark: Omit<BookmarkData, 'id'>) => Promise<boolean>;
   deleteBookmark: (id: string) => Promise<boolean>;
+  updateBookmark: (id: string, bookmark: Partial<BookmarkData>) => Promise<boolean>;
+  reorderBookmarks: (updates: {id: string, order: number}[]) => Promise<boolean>;
+  
+  // Bookmark Categories
+  addBookmarkCategory: (category: Omit<BookmarkCategory, 'id'>) => Promise<boolean>;
+  updateBookmarkCategory: (id: string, category: Partial<BookmarkCategory>) => Promise<boolean>;
+  deleteBookmarkCategory: (id: string) => Promise<boolean>;
+  reorderBookmarkCategories: (updates: {id: string, order: number}[]) => Promise<boolean>;
   
   // Epochs
   addEpochCategory: (category: Omit<EpochCategory, 'id'>) => Promise<boolean>;
@@ -30,6 +38,13 @@ const DataContext = createContext<DataContextType>({
   deleteTravel: async () => false,
   addBookmark: async () => false,
   deleteBookmark: async () => false,
+  updateBookmark: async () => false,
+  reorderBookmarks: async () => false,
+
+  addBookmarkCategory: async () => false,
+  updateBookmarkCategory: async () => false,
+  deleteBookmarkCategory: async () => false,
+  reorderBookmarkCategories: async () => false,
 
   addEpochCategory: async () => false,
   updateEpochCategory: async () => false,
@@ -228,6 +243,121 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
+  const updateBookmark = async (id: string, update: Partial<BookmarkData>) => {
+    try {
+      const res = await fetch(`/api/data/bookmarks/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(update)
+      });
+      if (res.ok) {
+        const item = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarks: prev.bookmarks.map(b => b.id === id ? item : b) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const reorderBookmarks = async (updates: {id: string, order: number}[]) => {
+    try {
+      const res = await fetch('/api/data/bookmarks-reorder', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const items = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarks: items } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const addBookmarkCategory = async (category: Omit<BookmarkCategory, 'id'>) => {
+    try {
+      const res = await fetch('/api/data/bookmark-categories', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(category)
+      });
+      if (res.ok) {
+        const newCategory = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarkCategories: [...(prev.bookmarkCategories || []), newCategory] } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const updateBookmarkCategory = async (id: string, category: Partial<BookmarkCategory>) => {
+    try {
+      const res = await fetch(`/api/data/bookmark-categories/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(category)
+      });
+      if (res.ok) {
+        const item = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarkCategories: (prev.bookmarkCategories || []).map(c => c.id === id ? item : c) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const deleteBookmarkCategory = async (id: string) => {
+    try {
+      const res = await fetch(`/api/data/bookmark-categories/${id}`, { method: 'DELETE', headers: getHeaders() });
+      if (res.ok) {
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarkCategories: (prev.bookmarkCategories || []).filter(c => c.id !== id) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const reorderBookmarkCategories = async (updates: {id: string, order: number}[]) => {
+    try {
+      const res = await fetch('/api/data/bookmark-categories-reorder', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const items = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, bookmarkCategories: items } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
   const updateTravel = async (id: string, travelUpdate: Partial<TravelData>) => {
     try {
       const res = await fetch(`/api/data/travels/${id}`, {
@@ -363,7 +493,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{
       data, loading, refresh: fetchData,
-      updateHomeConfig, addTravel, updateTravel, deleteTravel, addBookmark, deleteBookmark,
+      updateHomeConfig, addTravel, updateTravel, deleteTravel,
+      addBookmark, deleteBookmark, updateBookmark, reorderBookmarks,
+      addBookmarkCategory, updateBookmarkCategory, deleteBookmarkCategory, reorderBookmarkCategories,
       addEpochCategory, updateEpochCategory, deleteEpochCategory,
       addEpochEvent, updateEpochEvent, deleteEpochEvent
     }}>

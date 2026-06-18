@@ -29,12 +29,20 @@ export interface TravelData {
   externalLinkText?: string;
 }
 
+export interface BookmarkCategory {
+  id: string;
+  name: string;
+  order?: number;
+}
+
 export interface BookmarkData {
   id: string;
   title: string;
   url: string;
-  description: string;
-  category?: string;
+  description?: string;
+  category?: string; // legacy category string
+  categoryId?: string; // reference to custom category
+  order?: number;
 }
 
 export interface BackupSettings {
@@ -63,6 +71,7 @@ export interface PlatformData {
   home: HomeData;
   travels: TravelData[];
   isTravelAuthorized?: boolean;
+  bookmarkCategories?: BookmarkCategory[];
   bookmarks: BookmarkData[];
   epochCategories: EpochCategory[];
   epochEvents: EpochEvent[];
