@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { PlatformData, HomeData, TravelData, BookmarkData } from '../types';
+import { PlatformData, HomeData, TravelData, BookmarkData, EpochCategory, EpochEvent } from '../types';
 
 interface DataContextType {
   data: PlatformData | null;
@@ -8,9 +8,17 @@ interface DataContextType {
   updateHomeConfig: (homeData: Partial<HomeData>) => Promise<boolean>;
   addTravel: (travel: Omit<TravelData, 'id'>) => Promise<boolean>;
   deleteTravel: (id: string) => Promise<boolean>;
-  updateTravel?: (id: string, travel: Partial<TravelData>) => Promise<boolean>; // optional to implement later if needed
+  updateTravel?: (id: string, travel: Partial<TravelData>) => Promise<boolean>;
   addBookmark: (bookmark: Omit<BookmarkData, 'id'>) => Promise<boolean>;
   deleteBookmark: (id: string) => Promise<boolean>;
+  
+  // Epochs
+  addEpochCategory: (category: Omit<EpochCategory, 'id'>) => Promise<boolean>;
+  updateEpochCategory: (id: string, category: Partial<EpochCategory>) => Promise<boolean>;
+  deleteEpochCategory: (id: string) => Promise<boolean>;
+  addEpochEvent: (event: Omit<EpochEvent, 'id'>) => Promise<boolean>;
+  updateEpochEvent: (id: string, event: Partial<EpochEvent>) => Promise<boolean>;
+  deleteEpochEvent: (id: string) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType>({
@@ -22,6 +30,13 @@ const DataContext = createContext<DataContextType>({
   deleteTravel: async () => false,
   addBookmark: async () => false,
   deleteBookmark: async () => false,
+
+  addEpochCategory: async () => false,
+  updateEpochCategory: async () => false,
+  deleteEpochCategory: async () => false,
+  addEpochEvent: async () => false,
+  updateEpochEvent: async () => false,
+  deleteEpochEvent: async () => false,
 });
 
 export const useData = () => useContext(DataContext);
@@ -235,8 +250,123 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
+  const addEpochCategory = async (category: Omit<EpochCategory, 'id'>) => {
+    try {
+      const res = await fetch('/api/data/epoch-categories', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(category)
+      });
+      if (res.ok) {
+        const newCategory = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, epochCategories: [...(prev.epochCategories || []), newCategory] } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const updateEpochCategory = async (id: string, category: Partial<EpochCategory>) => {
+    try {
+      const res = await fetch(`/api/data/epoch-categories/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(category)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, epochCategories: (prev.epochCategories || []).map(c => c.id === id ? updated : c) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const deleteEpochCategory = async (id: string) => {
+    try {
+      const res = await fetch(`/api/data/epoch-categories/${id}`, { method: 'DELETE', headers: getHeaders() });
+      if (res.ok) {
+        setData(prev => {
+          const newData = prev ? { ...prev, epochCategories: (prev.epochCategories || []).filter(c => c.id !== id) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const addEpochEvent = async (event: Omit<EpochEvent, 'id'>) => {
+    try {
+      const res = await fetch('/api/data/epoch-events', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(event)
+      });
+      if (res.ok) {
+        const newEvent = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, epochEvents: [...(prev.epochEvents || []), newEvent] } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const updateEpochEvent = async (id: string, event: Partial<EpochEvent>) => {
+    try {
+      const res = await fetch(`/api/data/epoch-events/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(event)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setData(prev => {
+          const newData = prev ? { ...prev, epochEvents: (prev.epochEvents || []).map(e => e.id === id ? updated : e) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
+  const deleteEpochEvent = async (id: string) => {
+    try {
+      const res = await fetch(`/api/data/epoch-events/${id}`, { method: 'DELETE', headers: getHeaders() });
+      if (res.ok) {
+        setData(prev => {
+          const newData = prev ? { ...prev, epochEvents: (prev.epochEvents || []).filter(e => e.id !== id) } : null;
+          if (newData) localStorage.setItem('platform_data', JSON.stringify(newData));
+          return newData;
+        });
+        return true;
+      }
+    } catch (e) { console.error(e); }
+    return false;
+  };
+
   return (
-    <DataContext.Provider value={{ data, loading, refresh: fetchData, updateHomeConfig, addTravel, updateTravel, deleteTravel, addBookmark, deleteBookmark }}>
+    <DataContext.Provider value={{
+      data, loading, refresh: fetchData,
+      updateHomeConfig, addTravel, updateTravel, deleteTravel, addBookmark, deleteBookmark,
+      addEpochCategory, updateEpochCategory, deleteEpochCategory,
+      addEpochEvent, updateEpochEvent, deleteEpochEvent
+    }}>
       {children}
     </DataContext.Provider>
   );

@@ -94,7 +94,9 @@ app.get('/api/data', (req, res) => {
       home: services.home.read(),
       travels: isTravelAuthorized ? services.travels.readAll() : [],
       isTravelAuthorized,
-      bookmarks: services.bookmarks.readAll()
+      bookmarks: services.bookmarks.readAll(),
+      epochCategories: isTravelAuthorized ? services.epochCategories.readAll() : [],
+      epochEvents: isTravelAuthorized ? services.epochEvents.readAll() : []
     };
     if (isAdmin) {
       data.backupSettings = services.settings.read().backupSettings || {
@@ -296,6 +298,51 @@ app.delete('/api/data/bookmarks/:id', authenticateToken, (req, res) => {
   }
 });
 
+// Epochs
+app.post('/api/data/epoch-categories', authenticateToken, (req, res) => {
+  try {
+    const newCategory = { id: Date.now().toString(), ...req.body };
+    services.epochCategories.add(newCategory);
+    res.json(newCategory);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/data/epoch-categories/:id', authenticateToken, (req, res) => {
+  try {
+    const updated = services.epochCategories.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.delete('/api/data/epoch-categories/:id', authenticateToken, (req, res) => {
+  try {
+    services.epochCategories.delete(req.params.id);
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.post('/api/data/epoch-events', authenticateToken, (req, res) => {
+  try {
+    const newEvent = { id: Date.now().toString(), ...req.body };
+    services.epochEvents.add(newEvent);
+    res.json(newEvent);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/data/epoch-events/:id', authenticateToken, (req, res) => {
+  try {
+    const updated = services.epochEvents.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.delete('/api/data/epoch-events/:id', authenticateToken, (req, res) => {
+  try {
+    services.epochEvents.delete(req.params.id);
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+});
+
 app.put('/api/data/backup/settings', authenticateToken, (req, res) => {
   try {
     const backupSettings = req.body;
@@ -478,6 +525,26 @@ async function performImport(extractDir: string, strategy: 'merge' | 'replace') 
     }
   }
 
+  const tempEpochCatDir = path.join(extractDir, 'data', 'epochCategories');
+  let importedEpochCategories: any[] = [];
+  if (fs.existsSync(tempEpochCatDir)) {
+    const chunks = fs.readdirSync(tempEpochCatDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+    for (const chunk of chunks) {
+      const data = getImportData<any[]>(path.join(tempEpochCatDir, chunk)) || [];
+      if (Array.isArray(data)) importedEpochCategories = importedEpochCategories.concat(data);
+    }
+  }
+
+  const tempEpochEventDir = path.join(extractDir, 'data', 'epochEvents');
+  let importedEpochEvents: any[] = [];
+  if (fs.existsSync(tempEpochEventDir)) {
+    const chunks = fs.readdirSync(tempEpochEventDir).filter(f => f.startsWith('chunk_') && f.endsWith('.json'));
+    for (const chunk of chunks) {
+      const data = getImportData<any[]>(path.join(tempEpochEventDir, chunk)) || [];
+      if (Array.isArray(data)) importedEpochEvents = importedEpochEvents.concat(data);
+    }
+  }
+
   const homePath = path.join(extractDir, 'data', 'home.json');
   let importedHome: any = null;
   if (fs.existsSync(homePath)) {
@@ -486,9 +553,13 @@ async function performImport(extractDir: string, strategy: 'merge' | 'replace') 
 
   const localTravels = services.travels.readAll();
   const localBookmarks = services.bookmarks.readAll();
+  const localEpochCats = services.epochCategories.readAll();
+  const localEpochEvents = services.epochEvents.readAll();
 
   let finalTravels: any[] = [];
   let finalBookmarks: any[] = [];
+  let finalEpochCats: any[] = [];
+  let finalEpochEvents: any[] = [];
 
   if (strategy === 'merge') {
     const importedTravelIds = new Set(importedTravels.map(t => t.id));
@@ -498,9 +569,19 @@ async function performImport(extractDir: string, strategy: 'merge' | 'replace') 
     const importedBookmarkIds = new Set(importedBookmarks.map(b => b.id));
     const localOnlyBookmarks = localBookmarks.filter(b => !importedBookmarkIds.has(b.id));
     finalBookmarks = [...localOnlyBookmarks, ...importedBookmarks];
+
+    const importedCatIds = new Set(importedEpochCategories.map(c => c.id));
+    const localOnlyCats = localEpochCats.filter(c => !importedCatIds.has(c.id));
+    finalEpochCats = [...localOnlyCats, ...importedEpochCategories];
+
+    const importedEventIds = new Set(importedEpochEvents.map(e => e.id));
+    const localOnlyEvents = localEpochEvents.filter(e => !importedEventIds.has(e.id));
+    finalEpochEvents = [...localOnlyEvents, ...importedEpochEvents];
   } else {
     finalTravels = importedTravels;
     finalBookmarks = importedBookmarks;
+    finalEpochCats = importedEpochCategories.length > 0 ? importedEpochCategories : localEpochCats; // keep defaults if none
+    finalEpochEvents = importedEpochEvents;
   }
 
   const getTravelImagePaths = (travels: any[]) => {
@@ -542,6 +623,8 @@ async function performImport(extractDir: string, strategy: 'merge' | 'replace') 
 
   services.travels.writeAll(finalTravels);
   services.bookmarks.writeAll(finalBookmarks);
+  services.epochCategories.writeAll(finalEpochCats);
+  services.epochEvents.writeAll(finalEpochEvents);
 
   if (importedHome) {
     services.home.write({...services.home.read(), ...importedHome});

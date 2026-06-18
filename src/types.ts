@@ -45,11 +45,27 @@ export interface BackupSettings {
   retentionCount: number;
 }
 
+export interface EpochCategory {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface EpochEvent {
+  id: string;
+  date: string;
+  title: string;
+  desc?: string;
+  categoryId: string;
+}
+
 export interface PlatformData {
   home: HomeData;
   travels: TravelData[];
   isTravelAuthorized?: boolean;
   bookmarks: BookmarkData[];
+  epochCategories: EpochCategory[];
+  epochEvents: EpochEvent[];
   settings?: {
     passwordHash: string;
   };

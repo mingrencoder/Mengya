@@ -1,6 +1,6 @@
 import React from 'react';
 import { useData } from '../lib/DataContext';
-import { MoveRight } from 'lucide-react';
+import { MoveRight, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -62,14 +62,19 @@ export function Home() {
             </p>
           )}
           {home.description && (
-            <p className='text-lg text-slate-600 dark:text-slate-400 leading-relaxed font-light whitespace-pre-wrap'>
+            <p className='text-lg text-slate-600 dark:text-slate-400 leading-relaxed font-light whitespace-pre-wrap flex-1'>
               {home.description}
             </p>
           )}
           
-          <Link to="/travels" className="mt-8 flex items-center gap-3 text-sm text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer w-fit group/link">
-            探索旅程 <MoveRight className="w-4 h-4 transform group-hover/link:translate-x-1 transition-transform" />
-          </Link>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link to="/travels" className="flex items-center gap-3 px-6 py-3 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium hover:scale-105 transition-transform shadow-xl">
+              探索旅程 <MoveRight className="w-4 h-4" />
+            </Link>
+            <Link to="/epochs" className="flex items-center gap-3 px-6 py-3 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium hover:scale-105 transition-transform shadow-xl">
+              时光纪元 <Calendar className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </motion.div>
 

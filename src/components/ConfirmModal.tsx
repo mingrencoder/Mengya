@@ -11,9 +11,10 @@ interface ConfirmModalProps {
   onCancel: () => void;
   confirmText?: string;
   type?: 'danger' | 'warning' | 'info';
+  isAlert?: boolean;
 }
 
-export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = '确认删除', type = 'danger' }: ConfirmModalProps) {
+export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = '确认', type = 'danger', isAlert = false }: ConfirmModalProps) {
   if (!isOpen) return null;
 
   const typeConfig = {
@@ -76,12 +77,14 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, conf
             </div>
             
             <div className="flex items-center justify-end gap-3 mt-6 pt-2">
-              <button
-                onClick={onCancel}
-                className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors"
-              >
-                取消
-              </button>
+              {!isAlert && (
+                <button
+                  onClick={onCancel}
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  取消
+                </button>
+              )}
               <button
                 onClick={onConfirm}
                 className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors shadow-lg ${config.btnBg} ${config.btnShadow}`}

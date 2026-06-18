@@ -11,6 +11,7 @@ import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Travels } from './pages/Travels';
 import { Bookmarks } from './pages/Bookmarks';
+import { Epochs } from './pages/Epochs';
 import { Admin } from './pages/Admin';
 import { SettingsPage } from './pages/Settings';
 
@@ -22,6 +23,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
+              <Route path="epochs" element={<Epochs />} />
               <Route path="travels" element={<Travels />} />
               <Route path="bookmarks" element={<Bookmarks />} />
               <Route path="admin" element={<Admin />} />

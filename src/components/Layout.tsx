@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Compass, Book, User, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Compass, Book, User, Settings, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { useSettings } from '../lib/SettingsContext';
@@ -18,6 +18,7 @@ export function Layout() {
 
   const NAV_ITEMS = [
     { path: '/', label: t('nav.home'), icon: User },
+    { path: '/epochs', label: '时光纪元', icon: Calendar },
     { path: '/travels', label: t('nav.travels'), icon: Compass },
     { path: '/bookmarks', label: t('nav.bookmarks'), icon: Book },
   ];
@@ -83,7 +84,7 @@ export function Layout() {
         )}
       >
         <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-24 md:pb-12 pt-8">
-          <div className={cn("mx-auto w-full transition-all duration-300", location.pathname === '/travels' ? "max-w-full 2xl:max-w-screen-3xl" : "max-w-5xl")}>
+          <div className={cn("mx-auto w-full transition-all duration-300", ['/travels', '/epochs'].includes(location.pathname) ? "max-w-full 2xl:max-w-[1800px]" : "max-w-5xl")}>
             <OutAnimatedWrapper />
           </div>
         </div>

@@ -359,7 +359,7 @@ export function Travels() {
               <Lock className="w-8 h-8 text-indigo-500" />
            </div>
            <h2 className="text-xl font-bold dark:text-white mb-2">访问受限</h2>
-           <p className="text-slate-400 text-sm text-center mb-6">访问旅行日记需要输入密码。</p>
+           <p className="text-slate-400 text-sm text-center mb-6">此区域需要输入时光密码。</p>
            <form onSubmit={handleLogin} className="w-full space-y-4">
               <div className="relative">
                 <input 
@@ -367,7 +367,7 @@ export function Travels() {
                    value={password}
                    onChange={e => setPassword(e.target.value)}
                    className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                   placeholder="请输入旅行日记密码"
+                   placeholder="请输入时光密码"
                 />
                 <button
                   type="button"

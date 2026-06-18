@@ -993,13 +993,13 @@ function PasswordEditor({ token }: { token: string }) {
           </div>
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs text-white/50 px-1">新旅行日记密码（留空则不修改，默认: 123321）</label>
+          <label className="text-xs text-white/50 px-1">新时光密码（留空则不修改，默认: 123321）</label>
           <div className="relative">
             <input
               type={showTravelPassword ? "text" : "password"}
               value={travelPassword}
               onChange={(e) => setTravelPassword(e.target.value)}
-              placeholder="请输入新旅行日记密码"
+              placeholder="请输入新时光密码"
               className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm"
             />
             <button
