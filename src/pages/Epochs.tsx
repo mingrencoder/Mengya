@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '../lib/DataContext';
-import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Tag, Edit2, Trash2, Check, Lock, Eye, EyeOff, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Tag, Edit2, Trash2, Check, Lock, Eye, EyeOff, Settings, ZoomIn, RotateCcw } from 'lucide-react';
 import { EpochCategory, EpochEvent } from '../types';
 import { cn } from '../lib/utils';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -9,6 +9,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 export function Epochs() {
   const { data, loading, refresh, addEpochEvent, updateEpochEvent, deleteEpochEvent, addEpochCategory, updateEpochCategory, deleteEpochCategory } = useData();
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [scale, setScale] = useState<number>(1);
   
   // Auth state
   const isLocked = data && data.isTravelAuthorized === false;
@@ -272,6 +273,30 @@ export function Epochs() {
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Scale Slider */}
+          <div className="hidden sm:flex items-center gap-2 bg-[#111111]/80 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-2 shadow-lg h-[46px]">
+            <ZoomIn className="w-4 h-4 text-white/50" />
+            <input 
+              type="range" 
+              min="0.5" 
+              max="2" 
+              step="0.05" 
+              value={scale} 
+              onChange={e => setScale(parseFloat(e.target.value))}
+              className="w-20 sm:w-28 accent-indigo-500 cursor-pointer"
+            />
+            <span className="text-xs text-white/50 w-8 text-right font-mono">{Math.round(scale * 100)}%</span>
+            {scale !== 1 && (
+              <button 
+                onClick={() => setScale(1)} 
+                className="text-white/30 hover:text-white/70 ml-1 transition-colors"
+                title="重置缩放"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          
           <div className="flex items-center gap-2 bg-[#111111]/80 backdrop-blur-md border border-white/10 rounded-2xl p-2 shadow-lg w-max">
             <button onClick={() => setSelectedYear(y => y - 1)} className="p-2 dark:text-white/70 hover:dark:text-white hover:bg-white/5 rounded-xl transition-colors">
               <ChevronLeft className="w-5 h-5" />
@@ -291,15 +316,20 @@ export function Epochs() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 lg:gap-5 justify-center w-full mt-2">
+      <div 
+        className="grid gap-3 sm:gap-4 lg:gap-5 justify-center w-full mt-2 transition-all duration-300"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 240 * scale)}px, 1fr))`
+        }}
+      >
         {months.map((days, index) => (
-          <div key={index} className="bg-[#111111]/80 backdrop-blur-md border border-white/10 shadow-lg rounded-2xl p-4 flex flex-col space-y-3 w-full">
+          <div key={index} className="bg-[#111111]/80 backdrop-blur-md border border-white/10 shadow-lg rounded-2xl p-3 sm:p-4 flex flex-col space-y-3 w-full">
             <div className="flex items-center gap-2 px-1">
               <CalendarIcon className="w-4 h-4 text-indigo-400" />
               <span className="font-semibold text-sm dark:text-[#ededed]">{index + 1} 月</span>
             </div>
             
-            <div className="grid grid-cols-7 gap-1.5 mt-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mt-2">
               <div className="text-[10px] text-center text-white/30 mb-1">日</div>
               <div className="text-[10px] text-center text-white/30 mb-1">一</div>
               <div className="text-[10px] text-center text-white/30 mb-1">二</div>
@@ -317,19 +347,31 @@ export function Epochs() {
                 const dateStr = d.toLocaleDateString('en-CA'); // YYYY-MM-DD local
                 const { className, style } = getDayStyle(dateStr);
                 const isToday = new Date().toLocaleDateString('en-CA') === dateStr;
+                
+                const finalStyle = { ...style };
+                if (isToday) {
+                  finalStyle.outline = "2px solid #fff";
+                  finalStyle.outlineOffset = "2px";
+                  const existingShadow = style?.boxShadow || '';
+                  finalStyle.boxShadow = existingShadow ? `${existingShadow}, 0 0 20px rgba(255,255,255,0.8)` : '0 0 20px rgba(255,255,255,0.8)';
+                }
+
                 return (
                   <button
                     key={d.getDate()}
                     onClick={() => handleCellClick(dateStr)}
-                    style={style}
+                    style={finalStyle}
                     title={dateStr}
                     className={cn(
-                      "aspect-square rounded-md transition-all duration-300 relative group flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-[1.15] z-10",
+                      "aspect-square rounded-md transition-all duration-300 relative group flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-[1.15] z-10 overflow-hidden",
                       className,
-                      isToday && "ring-1 ring-white"
+                      isToday && "z-30 scale-[1.1] !opacity-100 font-bold"
                     )}
                   >
-                    <span className="text-[10px] sm:text-[11px] text-white/90 font-medium group-hover:text-white transition-colors drop-shadow-md">{d.getDate()}</span>
+                    <span className={cn(
+                      "text-[9px] sm:text-[11px] transition-colors drop-shadow-md",
+                      isToday ? "text-white font-bold" : "text-white/90 font-medium group-hover:text-white"
+                    )}>{d.getDate()}</span>
                   </button>
                 )
               })}
