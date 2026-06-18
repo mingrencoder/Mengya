@@ -107,7 +107,10 @@ export class BackupService {
     let cronExpression = `${minute} ${hour} * * *`; // daily by default
 
     if (backupSettings.frequency === 'weekly') {
-      cronExpression = `${minute} ${hour} * * ${backupSettings.dayOfWeek || 0}`;
+      const days = backupSettings.daysOfWeek && backupSettings.daysOfWeek.length > 0 
+        ? backupSettings.daysOfWeek.join(',') 
+        : ((backupSettings as any).dayOfWeek ?? 0);
+      cronExpression = `${minute} ${hour} * * ${days}`;
     }
 
     console.log(`Scheduling backup with cron: ${cronExpression}`);

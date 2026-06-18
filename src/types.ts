@@ -40,7 +40,7 @@ export interface BookmarkData {
 export interface BackupSettings {
   enabled: boolean;
   frequency: 'daily' | 'weekly';
-  dayOfWeek?: number;
+  daysOfWeek?: number[];
   time: string;
   retentionCount: number;
 }

@@ -422,8 +422,18 @@ function DataExportImport({ token }: { token: string }) {
     events: 'merge'
   });
 
-  // Backup Settings Form State
-  const [backupSettings, setBackupSettings] = useState(() => data?.backupSettings || { enabled: false, frequency: 'daily', dayOfWeek: 1, time: '02:00', retentionCount: 1 });
+  const [backupSettings, setBackupSettings] = useState(() => {
+    if (data?.backupSettings) {
+      const bs = { ...data.backupSettings };
+      if (!bs.daysOfWeek && (bs as any).dayOfWeek !== undefined) {
+        bs.daysOfWeek = [(bs as any).dayOfWeek];
+      } else if (!bs.daysOfWeek) {
+        bs.daysOfWeek = [1];
+      }
+      return bs;
+    }
+    return { enabled: false, frequency: 'daily', daysOfWeek: [1], time: '02:00', retentionCount: 1 };
+  });
   const [savingBackup, setSavingBackup] = useState(false);
   const [triggeringBackup, setTriggeringBackup] = useState(false);
 
@@ -821,21 +831,35 @@ function DataExportImport({ token }: { token: string }) {
                   </div>
 
                   {backupSettings.frequency === 'weekly' && (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 col-span-2 sm:col-span-1">
                       <label className="text-xs text-white/50 px-1">周几备份</label>
-                      <select
-                        value={backupSettings.dayOfWeek}
-                        onChange={(e) => setBackupSettings({ ...backupSettings, dayOfWeek: parseInt(e.target.value) })}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm text-slate-700 dark:text-white"
-                      >
-                        <option value="1">周一</option>
-                        <option value="2">周二</option>
-                        <option value="3">周三</option>
-                        <option value="4">周四</option>
-                        <option value="5">周五</option>
-                        <option value="6">周六</option>
-                        <option value="0">周日</option>
-                      </select>
+                      <div className="flex flex-wrap gap-1">
+                        {[1, 2, 3, 4, 5, 6, 0].map(day => {
+                          const isSelected = backupSettings.daysOfWeek?.includes(day);
+                          const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => {
+                                const currentDays = backupSettings.daysOfWeek || [];
+                                const newDays = isSelected
+                                  ? currentDays.filter(d => d !== day)
+                                  : [...currentDays, day];
+                                setBackupSettings({ ...backupSettings, daysOfWeek: newDays });
+                              }}
+                              className={cn(
+                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                                isSelected 
+                                  ? "bg-indigo-500 text-white border-indigo-500" 
+                                  : "bg-black/20 text-slate-500 dark:text-white/50 border-white/10 hover:bg-black/30 dark:hover:bg-white/10"
+                              )}
+                            >
+                              {dayNames[day].replace('周', '')}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 

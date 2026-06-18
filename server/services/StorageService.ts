@@ -224,7 +224,7 @@ export const services = {
     backupSettings: {
       enabled: false,
       frequency: 'daily',
-      dayOfWeek: 1,
+      daysOfWeek: [1],
       time: '02:00',
       retentionCount: 1
     }
